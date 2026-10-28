@@ -27,7 +27,7 @@ describe('プリセット', () => {
 });
 
 describe('テキスト → プリセット列', () => {
-  it('語彙一致(漢字・かな・語幹)', () => {
+  it('語彙一致(漢字・かな・活用形)', () => {
     expect(ids(textToSequence('ありがとう'))).toEqual(['ありがとう']);
     expect(ids(textToSequence('すき'))).toEqual(['好き']);
     expect(ids(textToSequence('たべる 歌う'))).toEqual(['食べる', '歌う']);
@@ -62,6 +62,19 @@ describe('誤爆の回帰(短い語幹・長音・ハイフン)', () => {
     const s = textToSequence(w);
     expect(s).toHaveLength(1);
     expect(s[0].kind).toBe('unknown');
+  });
+  it('短い表記の境界判定: 続く語彙・装飾・終助詞', () => {
+    expect(ids(textToSequence('歌ってね'))).toEqual(['歌う', '?ね']);
+    expect(ids(textToSequence('すきありがとう'))).toEqual(['好き', 'ありがとう']);
+    expect(ids(textToSequence('好き歌う'))).toEqual(['好き', '歌う']);
+    expect(ids(textToSequence('すきすき'))).toEqual(['好き', '好き']);
+    for (const w of ['好き〜', '好きー', '歌う〜', '好きっ', '好き♪', '好き♡♡']) expect(textToSequence(w), w).toHaveLength(1);
+    expect(ids(textToSequence('好き〜'))).toEqual(['好き']);
+    for (const w of ['歌うよ', '歌うね', '歌うの', '好きよ', '好きね', '好きで', '好きだ', '食べるよ']) {
+      const s = textToSequence(w);
+      expect(s, w).toHaveLength(1);
+      expect(s[0].kind).toBe('motion');
+    }
   });
   it('活用形は身振りになる', () => {
     expect(ids(textToSequence('歌って'))).toEqual(['歌う']);
