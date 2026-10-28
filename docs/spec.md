@@ -75,6 +75,20 @@
 
 指示の例（どのボーンを特定し、指が足りなければ gesture-only に落とし、手のひら向きを手首位置より優先する、など）を YAML で表現できる形にする。retarget 指示は「必須/任意ボーン」「フォールバック」「意味を保つための優先順位（例: 正確な手首位置より読み取れる手の形を優先）」を含む。
 
+### 出力層(Phase 3)
+
+runtime JSON・retarget 指示書(YAML)・指示書(Markdown)は、**共通の中間オブジェクト brief model**（`src/export/brief.ts`、`briefVersion` 0.1.0）から生成する。YAML は brief model の直列化、Markdown は brief model だけを入力にした描画、runtime JSON は brief model 全体 + 実際に使われた motion 定義。片方だけが持つ情報は作らない。
+
+brief model の内容:
+- **motion 概要**: category / provenance の一覧、語彙（id・label・category・provenance・長さ）、全体の長さ、キュー列（開始/終了・本文・速度・身振りの語と motion id と絶対時刻・省略語・未登録語）、字幕のみになる語（`unsupported`＝語彙にない / `omitted`＝速度上限で省略）。
+- **avatar profile**: 必須（左右の手首と指15関節）/任意（肩・肘・顔）ボーンの対応表、不足ボーン、フォールバック（`isGestureOnly` の判定。`reason` は `declared`＝capability 宣言 / `missing-finger-bones`＝実際の欠損）。
+- **丸められる軸**: 使われる motion を実際に `retargetMotion` へ通して得た `clamped` を `side/joint/axis` 単位に集計（回数と motion id）。gesture-only では指は出力しないので対象外。
+- **優先順位**（上ほど優先）: ① 手のひらの向き（手首の回転）＞ ② 正確な手首位置 ＞ ③ 指の細部。合わせきれないときは下位を捨てる。指ボーンが無ければ gesture-only に落とす。
+- **規約**: 回転 euler・位置・左右鏡像・適用順への参照（本書「データモデル」「avatar profile」）。
+- **注意文**: 「未監修・手話風身振り」。手話そのものとして通訳・翻訳・対応を名乗らない。全出力に必ず入り、禁止語の走査（テスト）は出力文字列にも適用する。
+
+runtime JSON は `format: "hand-emotion.runtime-motion"`・`version: "0.1.0"`・`brief`・`motions`。同梱 motion はすべて `validateMotion` を通り、キューが参照する motion id は `motions` に存在する（`validateRuntimeMotion`）。UI は現在の入力・モード・選択した骨格に対する3種のプレビュー・コピー・ダウンロード（Blob）を持つ。
+
 ## MVP
 
 1. Three.js 上に左右の手だけを表示する。
