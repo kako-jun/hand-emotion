@@ -1,8 +1,8 @@
 // モード(字幕ワイプ / 指文字ワイプ / アバターリターゲット)の型と、入力テキスト → 再生計画の純粋関数。
 // モードは判別可能 union で分け、モードごとの語彙変換・プレビュー構成を取り違えられないようにする。
 import { FINGERSPELLING_MOTIONS } from '../text/presets';
-import { textToSequence } from '../text/vocabulary';
-import type { SequenceItem } from '../text/vocabulary';
+import { DEFAULT_VOCABULARY, textToSequence } from '../text/vocabulary';
+import type { SequenceItem, VocabEntry } from '../text/vocabulary';
 import { parseCues, detectFormat } from '../import/cues';
 import type { Cue, CueFormat, ParseIssue } from '../import/cues';
 import { buildCueTimeline } from '../motion/cueTimeline';
@@ -51,11 +51,11 @@ export function textToFingerspelling(text: string, motions: readonly MotionDefin
 }
 
 /** モードごとの、キュー本文 → 身振り列の変換 */
-export function sequenceForMode(mode: Mode, text: string): SequenceItem[] {
+export function sequenceForMode(mode: Mode, text: string, vocab: readonly VocabEntry[] = DEFAULT_VOCABULARY): SequenceItem[] {
   switch (mode.kind) {
     case 'caption-wipe':
     case 'avatar-retarget':
-      return textToSequence(text);
+      return textToSequence(text, vocab);
     case 'fingerspelling-wipe':
       return textToFingerspelling(text);
   }
@@ -68,9 +68,10 @@ export type Plan =
   | Readonly<{ ok: false; format: CueFormat; errors: readonly ParseIssue[] }>;
 
 /** 入力テキスト(形式は明示 or 自動判定)とモードから再生計画を作る */
-export function planFromText(input: string, format: CueFormat | 'auto', mode: Mode): Plan {
+/** vocab は語彙(省略は同梱の語彙。録画 motion を足した語彙を渡せる) */
+export function planFromText(input: string, format: CueFormat | 'auto', mode: Mode, vocab: readonly VocabEntry[] = DEFAULT_VOCABULARY): Plan {
   const f = format === 'auto' ? detectFormat(input) : format;
   const r = parseCues(f, input);
   if (!r.ok) return { ok: false, format: f, errors: r.errors };
-  return { ok: true, format: f, cues: r.cues, timeline: buildCueTimeline(r.cues, (t) => sequenceForMode(mode, t), transitionForMode(mode)) };
+  return { ok: true, format: f, cues: r.cues, timeline: buildCueTimeline(r.cues, (t) => sequenceForMode(mode, t, vocab), transitionForMode(mode)) };
 }

@@ -24,6 +24,12 @@ export function buildVocabulary(motions: readonly MotionDefinition[]): readonly 
 
 export const DEFAULT_VOCABULARY: readonly VocabEntry[] = buildVocabulary(PRESET_MOTIONS);
 
+/** 実行時に語彙へ録画 motion を足す(同じ id は置き換え)。利用者の語を先頭に置き、同じ長さの表記では既存の語彙より先に一致させる。元の語彙は書き換えない。 */
+export function addMotionToVocabulary(vocab: readonly VocabEntry[], motion: MotionDefinition): readonly VocabEntry[] {
+  const [entry] = buildVocabulary([motion]);
+  return [entry, ...vocab.filter((e) => e.motion.id !== motion.id)];
+}
+
 const DELIMITER = /[\s、。，．,.!?！？「」『』()（）…・]/u;
 /** 語の直後に付く装飾(長音・波線・記号・小さい「っ」)。語尾として読み飛ばし、短い表記の境界にもなる。区切りではない(「ラーメン」「a-b」を割らない) */
 const TAIL = /[ー〜~♪♡☆★っッ]/u;
