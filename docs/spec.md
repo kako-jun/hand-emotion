@@ -40,6 +40,7 @@
 - **位置の規約**: `wrist.position` は meter、原点は演者の胸中央（胸骨）、+x = 演者の右、+y = 上、+z = 前方。範囲は ±10m（回転の ±360 とは別定義）。
 - **左手は右手の鏡像として表す**: `left` に書く値は「右手と同じ規約で記述した値」で、左手に適用するときに鏡像変換する（位置 x と回転 y・z の符号を反転）。左右対称な動きなら left と right は同じ値になる。
 - `rangeOfMotion`（avatar profile）も右手基準で、左手には鏡像として同じ値を使う。
+- **timing の意味（再生）**: keyframe の `ease` / `hold` は「そのキーフレームから次のキーフレームへ向かう区間」に掛かる。`time`〜`time+hold` はそのポーズを保持し、`time+hold`〜次の `time` を ease（linear / ease-in = t² / ease-out = 1-(1-t)² / ease-in-out）で補間する。最初より前・最後より後は端のポーズを保持。`left`/`right` の片方しか書かれない手は、その手の指定があるキーフレームだけで補間し、一度も指定がない手は待機姿勢（胸の横で下ろす）。
 - keyframes の `time` は厳密に昇順、`time+hold` は `duration` 以内（浮動小数誤差 1e-9 を許容）。`reviewedAt` は `format: date` で実在日付を検証する。左右は `left`/`right` キーのみ、手ごとに指関節15個すべて必須。
 
 ### avatar profile（アバター定義）
@@ -51,7 +52,8 @@
 - 確定スキーマは `schema/avatar-profile.schema.json`（v0.1.0）。`capability`（`full`/`gesture-only`）、`bones`（VRM humanoid ボーン名等との対応）、`rangeOfMotion`（関節ごと・軸ごとの [min,max] 度）、`restPoseCorrection`（初期姿勢補正）を持つ。
 - `full` は全指ボーン必須。`gesture-only` は指ボーン無しを許容する。
 - 指ボーンが不足するアバターでは gesture mode のみ対応に落とす（フォールバック）。
-- 可動域を超える指示は、意味を保つ範囲で腕位置を補正する。
+- 可動域を超える指示は、意味を保つ範囲で腕位置を補正する（目標。Phase 1 の実装は、右手基準の可動域で各軸を clamp し、丸めた箇所を結果の `clamped` に記録するところまで。腕位置の補正は未実装）。
+- retarget の適用順: 可動域 clamp（右手基準）→ 左手のみ鏡像変換 → `restPoseCorrection`（ボーン名一致）を加算。`gesture-only`（宣言、または全指ボーンが揃っていない）では指の回転を出力せず、手首/腕のボーンだけを返す。
 
 ## モードの線引き（手話の正確性を誇張しない）
 
@@ -82,6 +84,8 @@
 5. 同じ motion JSON を別のアバター手骨格へ流し込む（retarget の疎通）。
 
 手話として正確に扱う語は、この段階では扱わず、後で監修前提にする。
+
+Phase 1 の実装: 5語彙はすべて `sign-like-gesture`・`unreviewed`（`presets/` と `samples/arigatou.motion.json`）。テキストは語彙の最長一致で列に変換し（形態素解析はしない。誤爆を避けるため1〜2文字の語幹は置かず活用形を列挙、2文字以下の表記は、直後が文末・区切り・装飾（ー〜♪っ 等）・それ自体で一致できる別の語彙のときだけ一致。語の直後の装飾は読み飛ばす）、未知語は無動作で「未登録」と字幕表示する。UI のモード名は「指文字/身振り支援」、常時「未監修・手話風身振り」を表示する。別骨格のデモは `samples/` の VRM / glTF 異名ボーン・狭い可動域 / gesture-only の3 profile を同じ motion に流して並べる。
 
 ## 歌詞/振付との接続
 

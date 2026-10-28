@@ -4,10 +4,12 @@
 
 「手話通訳」「手話翻訳」ではない。UI 上のモード名は「指文字/身振り支援」等とし、手話として扱うのは監修済み（ネイティブ手話話者が確認した）モーションだけ。詳細は `docs/spec.md`、構成は `docs/architecture.md`。
 
-## 現状（Phase 0）
+## 現状（Phase 1）
 
-- 完了: scaffold（Vite + TypeScript + Three.js + Vitest）、motion / avatar profile の JSON Schema、不変の定義型と可変の再生状態型の分離、ajv 検証器、サンプル JSON、単体テスト。
-- `npm run dev` は Three.js で両手のプレースホルダを表示するだけ（モーション再生・retarget は Phase 1）。
+- Phase 0: scaffold、motion / avatar profile の JSON Schema、定義型/再生状態型の分離、ajv 検証器。
+- Phase 1: 5語彙（ありがとう/こんにちは/好き/食べる/歌う）のプリセット（すべて未監修・手話風身振り）、keyframe 補間・ease・hold、テキスト→プリセット列（未知語は無動作で字幕のみ）、retarget 純粋関数（可動域 clamp・左手鏡像・gesture-only フォールバック）、簡易両手モデルの再生UI。
+- `npm run dev` で、入力した語が両手で再生され、同じ motion が2種類の骨格（VRM と異名ボーンの別骨格 / gesture-only）に並べて流し込まれる。
+- 未実装: 腕位置の可動域補正、歌詞タイムコード、顔、実アバター（VRM/glTF モデル）への適用。
 
 ## コマンド
 

@@ -4,9 +4,43 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>hand-emotion</title>
-    <style>html,body{margin:0;height:100%;background:#1a1a22}canvas{display:block}</style>
+    <style>
+      html,body{margin:0;height:100%;background:#1a1a22;color:#e8e8f0;font:14px/1.5 system-ui,sans-serif}
+      #app{display:flex;flex-direction:column;height:100%}
+      #panel{padding:10px 14px;display:flex;flex-direction:column;gap:6px;background:#22222c}
+      .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      #text{flex:1;min-width:220px;padding:6px;background:#15151b;color:inherit;border:1px solid #444;border-radius:4px}
+      button,select{padding:6px 12px;background:#33334a;color:inherit;border:1px solid #555;border-radius:4px;cursor:pointer}
+      #seek{flex:1;min-width:200px}
+      #badge{background:#5a3b00;color:#ffd48a;padding:2px 8px;border-radius:10px;font-size:12px}
+      #caption{min-height:1.5em;font-size:18px}
+      #caption.unknown{color:#aab}
+      #stage{flex:1;min-height:0;position:relative}
+      canvas{display:block;width:100%;height:100%}
+      .rig-label{position:absolute;top:8px;font-size:12px;color:#aab;transform:translateX(-50%)}
+      #note{font-size:12px;color:#99a}
+      [hidden]{display:none}
+    </style>
   </head>
   <body>
+    <div id="app">
+      <div id="panel">
+        <div class="row">
+          <strong id="mode"></strong>
+          <span id="badge"></span>
+          <span id="note"></span>
+        </div>
+        <div class="row">
+          <input id="text" type="text" />
+          <button id="play" type="button">再生</button>
+          <button id="stop" type="button">停止</button>
+          <label>右の骨格 <select id="rigB"></select></label>
+        </div>
+        <div class="row"><input id="seek" type="range" min="0" max="1000" value="0" /><span id="time"></span></div>
+        <div id="caption"></div>
+      </div>
+      <div id="stage"><span class="rig-label" id="labelA"></span><span class="rig-label" id="labelB"></span></div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -6,7 +6,7 @@
 
 ## スタック
 
-- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）。UI フレームワークは未採用（デモ/プレイグラウンドUI 着手時に決める）。
+- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）。UI フレームワークは未採用（Phase 1 は素の DOM）。
 - 独自の手話辞書・アバター資産を抱え込まず、**アバター非依存の中間表現（motion JSON）と avatar profile を介したマッピング**を中心にする。
 - 将来: HamNoSys / SiGML import、MediaPipe Hands、VRM / glTF humanoid rig への retarget。
 
@@ -32,7 +32,7 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 
 両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。
 
-## コード構成（Phase 0）
+## コード構成（Phase 0 + Phase 1）
 
 ```
 schema/motion.schema.json          # motion の JSON Schema（正本）
@@ -41,9 +41,20 @@ samples/                           # 検証を通るサンプル（motion / VRM 
 src/types/definition.ts            # 不変の定義型（readonly）。MotionDefinition / AvatarProfile
 src/types/playback.ts              # 可変の再生状態型。定義への参照のみ持ち、書き戻さない
 src/validate/index.ts              # ajv(+ajv-formats) 検証 + スキーマで書けない整合性（timing 昇順・可動域 min<=max）
-src/main.ts                        # Three.js 両手プレースホルダ表示（Phase 1 で置換）
+presets/*.motion.json              # Phase 1 の語彙プリセット(こんにちは/好き/食べる/歌う。ありがとうは samples/ を共用)
+samples/{gltf-custom,gesture-only}.avatar-profile.json  # 別骨格デモ用 profile
+src/motion/interpolate.ts          # ease・hold・keyframe 補間(純粋関数)。rest.ts は待機姿勢
+src/motion/timeline.ts             # 語彙列 → タイムライン、時刻 t の姿勢(語間は 0.4s 遷移)
+src/retarget/index.ts              # retargetPose / retargetMotion(純粋関数。可動域 clamp・左手鏡像・gesture-only・初期姿勢補正)
+src/text/{presets,vocabulary}.ts   # プリセット読み込み(検証つき)・テキスト → 語彙列(最長一致・未知語は unknown)
+src/ui/labels.ts                   # UI 文言(モード名・未監修バッジ)
+src/preview/handModel.ts           # Three.js 簡易手モデル。retarget 結果(ボーン名→回転)を適用するだけ
+src/main.ts                        # DOM UI(入力・再生/停止/シーク・字幕)と2骨格の並置プレビュー
 tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
 tests/typed-samples.ts             # 型付き(as const satisfies)フィクスチャ: サンプル相当 + reviewed/arm/hold/全 ease/jsl 入り
+tests/interpolate.test.ts          # 補間・ease・hold
+tests/retarget.test.ts             # 鏡像・可動域・gesture-only・初期姿勢補正
+tests/vocabulary.test.ts           # プリセット・語彙変換・タイムライン・UI 文言(禁止語走査)
 tests/types.test.ts                # フィクスチャ==サンプル JSON、フィクスチャがスキーマを通ることの確認
 ```
 
