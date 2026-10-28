@@ -31,12 +31,21 @@
 - **timing**: 開始時刻・終了時刻・ease・hold。
 - **semantic label**: 単語/句/歌詞/身振り名などの意味ラベル。
 
+確定スキーマは `schema/motion.schema.json`（v0.1.0）。motion は以下を必須で持つ。
+
+- **category（言語区分）**: `jsl`（日本手話）/ `kana-fingerspelling`（かな指文字）/ `sign-like-gesture`（手話風身振り）。3区分は混ぜない。
+- **provenance（監修状態）**: `unreviewed`（未監修）/ `reviewed`（監修済み）。`reviewed` は `reviewer` と `reviewedAt`（YYYY-MM-DD）が必須。
+- 「手話」として扱ってよいのは `category=jsl` かつ `reviewed` のみ（`isReviewedSignLanguage`）。
+- keyframes の `time` は厳密に昇順、`time+hold` は `duration` 以内。左右は `left`/`right` キーのみ、手ごとに指関節15個すべて必須。
+
 ### avatar profile（アバター定義）
 
 「このアバターでは、肩/肘/手首/各指がどのボーンか、可動域はどこまでか、初期姿勢をどう補正するか」を定義する。avatar profile は**アバターごとの不変の定義**であり、実行時 motion とは別に持つ。
 
 - 必須: 左手・右手・指ボーン。
 - 任意: 肘・肩・顔。
+- 確定スキーマは `schema/avatar-profile.schema.json`（v0.1.0）。`capability`（`full`/`gesture-only`）、`bones`（VRM humanoid ボーン名等との対応）、`rangeOfMotion`（関節ごと・軸ごとの [min,max] 度）、`restPoseCorrection`（初期姿勢補正）を持つ。
+- `full` は全指ボーン必須。`gesture-only` は指ボーン無しを許容する。
 - 指ボーンが不足するアバターでは gesture mode のみ対応に落とす（フォールバック）。
 - 可動域を超える指示は、意味を保つ範囲で腕位置を補正する。
 
@@ -44,7 +53,7 @@
 
 不正確な手話を「手話対応」と言い切ると逆効果になり得るため、モードを名前で明確に分ける。
 
-- **字幕ワイプモード**: 字幕テキストを元に、かな指文字や簡単な身振りを出す。手話通訳とは呼ばない。
+- **字幕ワイプモード**: 字幕テキストを元に、かな指文字や簡単な身振りを出す。手話通訳とは呼ばない。UI/コード上のモード名は「指文字/身振り支援」等とし、「手話通訳」「手話翻訳」を名乗る文言は作らない。
 - **指文字ワイプモード**: 固有名詞や短い語を指文字で表示する。
 - **監修済み手話ワイプモード**: ネイティブ手話話者が確認した語彙・フレーズだけを使う。この段階から初めて「手話対応」と言える。
 - **アバターリターゲット**: 好きな VRM / glTF / Three.js アバターへモーションを流し込む。ワイプ化そのものは利用側の演出。
