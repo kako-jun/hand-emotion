@@ -21,6 +21,10 @@ function toLines(input: string): string[] {
   return input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n');
 }
 
+/** 取り込む時刻の上限(秒)。99時間。これを超える/有限でない値は不正な時刻として扱う */
+export const MAX_TIME_SECONDS = 99 * 3600;
+const validTime = (t: number): boolean => Number.isFinite(t) && t <= MAX_TIME_SECONDS;
+
 /** 字幕テキスト中のタグ(<i> <c.x> <00:01.000> 等)を除く */
 const stripTags = (s: string): string => s.replace(/<[^>]*>/g, '');
 
@@ -35,7 +39,8 @@ function parseClock(s: string, hoursRequired: boolean): number | null {
   const sec = Number(m[3]);
   if (min >= 60 || sec >= 60) return null;
   const frac = m[4] ? Number(m[4].padEnd(3, '0')) / 1000 : 0;
-  return Number(m[1] ?? 0) * 3600 + min * 60 + sec + frac;
+  const t = Number(m[1] ?? 0) * 3600 + min * 60 + sec + frac;
+  return validTime(t) ? t : null;
 }
 
 /** `start --> end [settings]` を解釈する。解釈できなければエラー文字列 */
@@ -126,13 +131,14 @@ function parseLrcStamp(s: string): number | null {
   if (!m) return null;
   const sec = Number(m[2]);
   if (sec >= 60) return null;
-  return Number(m[1]) * 60 + sec + (m[3] ? Number(`0.${m[3]}`) : 0);
+  const t = Number(m[1]) * 60 + sec + (m[3] ? Number(`0.${m[3]}`) : 0);
+  return validTime(t) ? t : null;
 }
 
 export function parseLrc(input: string): ParseResult {
   const lines = toLines(input);
   const errors: ParseIssue[] = [];
-  let offset = 0; // 秒。正の値は歌詞を早める([offset:+500] = 0.5 秒早く)
+  let offset = 0; // 秒。正の値は歌詞を早める([offset:+500] = 0.5 秒早く)。置かれた位置に関わらず全行に効く
   const entries: { time: number; text: string }[] = [];
   lines.forEach((raw, i) => {
     const line = raw.trim();
@@ -141,6 +147,10 @@ export function parseLrc(input: string): ParseResult {
     const off = /^\[offset:\s*([+-]?\d+)\s*\]$/i.exec(line);
     if (off) {
       offset = Number(off[1]) / 1000;
+      if (!Number.isFinite(offset) || Math.abs(offset) > MAX_TIME_SECONDS) {
+        errors.push({ line: no, message: `offset が大きすぎます: ${line}` });
+        offset = 0;
+      }
       return;
     }
     if (/^\[offset:/i.test(line)) {
@@ -167,10 +177,11 @@ export function parseLrc(input: string): ParseResult {
       return;
     }
     const text = stripTags(rest).trim();
-    for (const t of stamps) entries.push({ time: Math.max(0, t - offset), text });
+    for (const t of stamps) entries.push({ time: t, text });
   });
   if (errors.length) return fail(errors);
-  const sorted = entries.map((e, i) => ({ e, i })).sort((a, b) => a.e.time - b.e.time || a.i - b.i).map((x) => x.e);
+  const shifted = entries.map((e) => ({ ...e, time: Math.max(0, e.time - offset) }));
+  const sorted = shifted.map((e, i) => ({ e, i })).sort((a, b) => a.e.time - b.e.time || a.i - b.i).map((x) => x.e);
   const cues: Cue[] = [];
   sorted.forEach((e, i) => {
     if (e.text === '') return; // 空行は直前の歌詞の終端マーカー

@@ -135,3 +135,43 @@ describe('形式の判定と振り分け', () => {
     expect(parseCues('lrc', 'a').ok).toBe(false);
   });
 });
+
+describe('追加の境界(巨大値・offset 位置・桁・REGION・同時刻)', () => {
+  const big = '9'.repeat(400);
+  it('巨大数値の時刻は Infinity で通さず、行番号つきエラー', () => {
+    expect(errsOf(parseSrt(`1\n00:00:01,000 --> ${big}:00:00,000\nx`))[0]).toMatchObject({ line: 2 });
+    expect(errsOf(parseSrt(`1\n${big}:00:00,000 --> 00:00:01,000\nx`))[0].line).toBe(2);
+    expect(errsOf(parseVtt(`WEBVTT\n\n${big}:00:00.000 --> 00:00:01.000\nx`))[0].line).toBe(3);
+    expect(errsOf(parseLrc(`[00:01.00]a\n[${big}:00.00]b`))[0].line).toBe(2);
+    expect(errsOf(parseLrc(`[offset:${big}]\n[00:01.00]a`))[0].line).toBe(1);
+  });
+  it('上限(99時間)ちょうどは通り、超えるとエラー', () => {
+    expect(cuesOf(parseSrt('1\n98:59:59,000 --> 99:00:00,000\nx'))[0].end).toBe(99 * 3600);
+    expect(errsOf(parseSrt('1\n100:00:00,000 --> 100:00:01,000\nx'))[0].line).toBe(2);
+  });
+  it('LRC の offset は置かれた位置(末尾・途中)に関わらず全行に効く', () => {
+    const tail = cuesOf(parseLrc('[00:02.00]a\n[00:04.00]b\n[offset:+500]'));
+    expect(tail.map((c) => c.start)).toEqual([1.5, 3.5]);
+    expect(cuesOf(parseLrc('[00:02.00]a\n[offset:+500]\n[00:04.00]b')).map((c) => c.start)).toEqual([1.5, 3.5]);
+  });
+  it('分が60以上・秒が60以上はそれぞれ単独でエラー', () => {
+    expect(errsOf(parseSrt('1\n00:60:00,000 --> 02:00:00,000\nx'))[0].line).toBe(2);
+    expect(errsOf(parseSrt('1\n00:00:60,000 --> 00:02:00,000\nx'))[0].line).toBe(2);
+    expect(errsOf(parseLrc('[00:60.00]x'))[0].line).toBe(1);
+  });
+  it('小数部は桁数でなく小数として読む(,5 = 0.5 秒、.25 = 0.25 秒)', () => {
+    expect(cuesOf(parseSrt('1\n00:00:01,5 --> 00:00:03,25\nx'))[0]).toMatchObject({ start: 1.5, end: 3.25 });
+    expect(cuesOf(parseVtt('WEBVTT\n\n00:01.5 --> 00:03.05\nx'))[0]).toMatchObject({ start: 1.5, end: 3.05 });
+  });
+  it('VTT の REGION ブロックは読み飛ばす', () => {
+    expect(cuesOf(parseVtt('WEBVTT\n\nREGION\nid:fred\nwidth:40%\n\n00:01.000 --> 00:02.000\nx'))).toEqual([{ start: 1, end: 2, text: 'x' }]);
+  });
+  it('LRC の同時刻2行は、どちらも次の「より遅い」行まで続く(幅0にならない)', () => {
+    expect(cuesOf(parseLrc('[00:01.00]a\n[00:01.00]b\n[00:03.00]c'))).toEqual([
+      { start: 1, end: 3, text: 'a' },
+      { start: 1, end: 3, text: 'b' },
+      { start: 3, end: 3 + LRC_LAST_DURATION, text: 'c' },
+    ]);
+  });
+});
+
