@@ -3,7 +3,7 @@
 import type { AvatarProfile, AxisRange, FingerJoint, HandPose, Keyframe, MotionDefinition, Pose, Side } from '../types/definition';
 import { validateMotion } from '../validate';
 import { handToPose } from './hand';
-import { DEFAULT_DECIMATE, DEFAULT_OUTLIER, channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, trimSamples, unwrapRotation, wrapRotation } from './series';
+import { DEFAULT_DECIMATE, normalizeRotationRuns, DEFAULT_OUTLIER, channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, trimSamples, unwrapRotation, wrapRotation } from './series';
 import type { DecimateOptions, OutlierOptions, Sample } from './series';
 import { DEFAULT_SETTINGS } from './types';
 import type { CaptureFrame, CaptureSettings, CaptureWarning, RangeWarning } from './types';
@@ -96,7 +96,7 @@ export function buildRecordedMotion(frames: readonly CaptureFrame[], opt: Record
     if (cleaned.removed) warnings.push({ kind: 'outliers', side, frames: cleaned.removed });
     const filled = fillGaps(cleaned.samples, opt.maxGap ?? 0.3);
     for (const g of filled.longGaps) warnings.push({ kind: 'long-gap', side, seconds: round(g, 2) });
-    const smoothed = smooth(filled.samples, opt.smoothHz ?? 6);
+    const smoothed = normalizeRotationRuns(smooth(filled.samples, opt.smoothHz ?? 6));
     const trimmed = opt.trim ? trimSamples(smoothed, opt.trim.start, opt.trim.end) : smoothed;
     if (trimmed.filter((s) => s.v).length < 2) continue;
     for (const i of decimate(trimmed, opt.decimate ?? DEFAULT_DECIMATE)) {

@@ -1,6 +1,7 @@
 // 手 1 本分の時系列(チャンネル = 手首位置 3 + 手首 euler 3 + 指の屈曲 15)に対する処理。純粋関数。
 // 外れ値除去 -> 欠落補間 -> 平滑 -> トリム -> keyframe 間引き の各段をここに置く。
 import { FINGER_JOINTS } from '../types/definition';
+import { wrap180 } from './math';
 import type { FingerJoint, HandPose, Vec3 } from '../types/definition';
 
 export const CHANNELS = 21;
@@ -20,10 +21,15 @@ export function channelsToPose(v: readonly number[]): HandPose {
   return { wrist: { position: [v[0], v[1], v[2]], rotation: [v[3], v[4], v[5]] }, joints };
 }
 
+/** 連続性を捨てる(正規形へ戻す)しきい値: 最も近い候補でも直前とのチャンネル最大差がこれ(度)を超えたら、誤検出や急な反転とみなす */
+export const UNWRAP_BREAK = 60;
+
 /** 手首 euler の周期ずれ(±180 をまたぐ)とジンバル付近の等価解をそろえる。
  *  同じ向きを表す euler は 2 つある: (x, y, z) と (x+180, 180-y, z-180)(z は motion の符号 = 橈屈。intrinsic XYZ の等価解)。
- *  y が ±90° 付近だと分解がどちらかへ飛ぶので、サンプルごとに直前の有効サンプルに近い方を選び、360 の倍数を足して連続にする。
- *  最初のサンプルは分解のまま(y は -90〜90)。y が 90 を超えて続いてよい(スキーマは ±360 まで)。 */
+ *  y が ±90° 付近だと分解がどちらかへ飛ぶので、サンプルごとに 2 つの等価解 × 360 の倍数のうち直前の有効サンプルに最も近い候補を選ぶ。
+ *  ただし最も近い候補でも直前との差が大きい(UNWRAP_BREAK 超)なら連続性を捨て、分解そのまま(正規形: x,z は ±180、y は ±90)を採る。
+ *  誤検出が 2 フレーム以上続いても、以降の録画全体が等価解や ±360 ずれた表現に固定されない。
+ *  最初のサンプルは分解のまま。y が 90 を超えて続いてよい(スキーマは ±360 まで)。 */
 export function unwrapRotation(samples: readonly Sample[]): Sample[] {
   let prev: number[] | null = null;
   const align = (v: number[], p: number[]): number[] => {
@@ -31,7 +37,7 @@ export function unwrapRotation(samples: readonly Sample[]): Sample[] {
     for (const c of ROT) o[c] += 360 * Math.round((p[c] - o[c]) / 360);
     return o;
   };
-  const dist = (v: number[], p: number[]): number => ROT.reduce((acc, c) => acc + Math.abs(v[c] - p[c]), 0);
+  const dist = (v: number[], p: number[]): number => Math.max(...ROT.map((c) => Math.abs(v[c] - p[c])));
   return samples.map((s) => {
     if (!s.v) return s;
     let v = s.v.slice();
@@ -42,11 +48,38 @@ export function unwrapRotation(samples: readonly Sample[]): Sample[] {
       alt[5] = v[5] - 180;
       const a = align(v, prev);
       const b = align(alt, prev);
-      v = dist(b, prev) < dist(a, prev) ? b : a;
+      const best = dist(b, prev) < dist(a, prev) ? b : a;
+      if (dist(best, prev) <= UNWRAP_BREAK) v = best;
     }
     prev = v;
     return { t: s.t, v };
   });
+}
+
+/** 連続区間(欠落・300° 超の飛びで区切る)ごとに手首 euler の表現を整える。
+ *  1. 区間全体に等価解の写像 (x+180, 180-y, z-180) を掛けた表現と掛けない表現のうち、y の可動域(±90°)からのはみ出しが小さい方を選ぶ
+ *     (連続性を保ったまま、誤検出に引きずられて y が ±90° を超えた表現に固定されたものを正規形側へ戻す。区間全体に同じ写像を掛けるので連続性は壊れない)。
+ *  2. 各チャンネルを、区間の中央値が ±180 に入るように 360 の倍数ぶん区間全体から引く。
+ *  1 サンプルずつ折り返すと、区間の途中で 360 をまたいだときに keyframe 間に 360° の段差ができて補間が逆回りになるため、区間全体を同じだけずらす。 */
+export function normalizeRotationRuns(samples: readonly Sample[]): Sample[] {
+  const out = samples.map((s) => ({ t: s.t, v: s.v ? s.v.slice() : null }));
+  const excess = (y: number): number => Math.max(0, Math.abs(wrap180(y)) - 90);
+  let i = 0;
+  while (i < out.length) {
+    if (!out[i].v) { i++; continue; }
+    let j = i + 1;
+    while (j < out.length && out[j].v && ROT.every((c) => Math.abs((out[j].v as number[])[c] - (out[j - 1].v as number[])[c]) <= 300)) j++;
+    const run = out.slice(i, j).map((s) => s.v as number[]);
+    const plain = run.reduce((acc, v) => acc + excess(v[4]), 0);
+    const flipped = run.reduce((acc, v) => acc + excess(180 - v[4]), 0);
+    if (flipped < plain) for (const v of run) { v[3] += 180; v[4] = 180 - v[4]; v[5] -= 180; }
+    for (const c of ROT) {
+      const shift = 360 * Math.round(median(run.map((v) => v[c])) / 360);
+      if (shift) for (const v of run) v[c] -= shift;
+    }
+    i = j;
+  }
+  return out;
 }
 
 const median = (xs: number[]): number => {

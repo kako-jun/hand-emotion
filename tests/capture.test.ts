@@ -5,7 +5,7 @@ import { estimateForearm, handReferenceFrame, handToPose, resolveSide } from '..
 import { matToEuler, eulerToMat, mul, transpose, wrap180 } from '../src/capture/math';
 import type { V3 } from '../src/capture/math';
 import { RECORDED_SOURCE, buildRecordedMotion, rangeWarnings } from '../src/capture/motion';
-import { DEFAULT_OUTLIER, channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, unwrapRotation, wrapRotation } from '../src/capture/series';
+import { DEFAULT_OUTLIER, channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, unwrapRotation, wrapRotation, normalizeRotationRuns } from '../src/capture/series';
 import type { Sample } from '../src/capture/series';
 import { DEFAULT_SETTINGS } from '../src/capture/types';
 import type { CaptureFrame, CaptureSettings, DetectedHand } from '../src/capture/types';
@@ -698,7 +698,7 @@ describe('CSP(外部への接続を絞る)', () => {
     const external = csp.replace(/;/g, ' ').split(/\s+/).filter((t) => /^(https?|wss?):/.test(t));
     expect(external).toEqual(['https://storage.googleapis.com']);
     expect(directive('connect-src')).toEqual(["'self'", 'blob:', 'data:', 'https://storage.googleapis.com']);
-    expect(directive('script-src')).toEqual(["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'"]); // unsafe-eval は ajv のスキーマ検証器の生成(new Function)に必要。外部スクリプトは許可しない
+    expect(directive('script-src')).toEqual(["'self'", "'wasm-unsafe-eval'"]); // unsafe-eval なし(検証器は ajv standalone で事前生成)。外部スクリプトも許可しない
     expect(directive('default-src')).toEqual(["'self'"]);
   });
 });
@@ -706,5 +706,73 @@ describe('CSP(外部への接続を絞る)', () => {
 describe('カメラのエラー分類(追加)', () => {
   it('OverconstrainedError は no-device', () => {
     expect(classifyCameraError(Object.assign(new Error('x'), { name: 'OverconstrainedError' }))).toBe('no-device');
+  });
+});
+
+describe('手首 euler の連続性: 誤検出で表現が固定されない', () => {
+  const R = (x: number, y: number, z: number, t: number): Sample => ({ t, v: [0, 0, 0, x, y, z, ...new Array(15).fill(0)] });
+  /** 向き(motion の規約)の正規形の分解: y が ±90 を超える等価な組を (x±180, 180-y, z∓180) に畳んで返す */
+  const canon = (x: number, y: number, z: number): [number, number, number] => {
+    let yy = wrap180(y);
+    let xx = wrap180(x);
+    let zz = wrap180(z);
+    if (yy > 90) { yy = 180 - yy; xx = wrap180(xx + 180); zz = wrap180(zz - 180); } else if (yy < -90) { yy = -180 - yy; xx = wrap180(xx + 180); zz = wrap180(zz - 180); }
+    return [xx, yy, zz];
+  };
+  const G: Vec3 = [4, 22, 5];
+  for (const n of [1, 2, 3]) {
+    it(`可動域内の一定姿勢 G -> ランダム向きの誤検出 ${n} フレーム -> G: 最終フレームが G に戻る`, () => {
+      const wrong: Vec3[] = [[-120, 50, 170], [150, -70, -100], [30, 80, -150]];
+      const seq: Sample[] = [];
+      for (let i = 0; i < 15; i++) seq.push(R(...G, i / 30));
+      for (let i = 0; i < n; i++) seq.push(R(...wrong[i], (15 + i) / 30));
+      for (let i = 0; i < 60; i++) seq.push(R(...G, (15 + n + i) / 30));
+      const out = normalizeRotationRuns(unwrapRotation(seq));
+      const last = (out[out.length - 1].v as number[]).slice(3, 6);
+      last.forEach((v, i) => expect(v).toBeCloseTo(G[i], 6));
+      // 区間全体で G が可動域内の表現(x±70・y±90・z±30)のまま
+      for (const s of out.slice(-60)) expect(Math.abs((s.v as number[])[3])).toBeLessThan(70);
+    });
+  }
+  it('ランダムな G・ランダム向きの誤検出 1〜3 フレームを 400 通り: 最終フレームは常に G に戻る(固定されない)', () => {
+    let seed = 7;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    const dec = (r: Vec3): Vec3 => { const e = matToEuler(eulerToMat([r[0], r[1], -r[2]])); return [e[0], e[1], -e[2]]; };
+    let bad = 0;
+    for (let trial = 0; trial < 400; trial++) {
+      const g = dec([rnd() * 100 - 50, rnd() * 120 - 60, rnd() * 40 - 20]);
+      const n = 1 + (trial % 3);
+      const outs = Array.from({ length: n }, () => dec([rnd() * 360 - 180, rnd() * 180 - 90, rnd() * 360 - 180]));
+      const seq = [...Array(15).fill(g), ...outs, ...Array(60).fill(g)].map((r: Vec3, i) => R(...r, i / 30));
+      const out = normalizeRotationRuns(unwrapRotation(seq));
+      const last = (out[out.length - 1].v as number[]).slice(3, 6);
+      if (Math.max(...last.map((x, i) => Math.abs(x - g[i]))) > 1) bad++;
+    }
+    expect(bad).toBe(0);
+  });
+  it('直前から大きく離れた向き(最も近い候補でも 60° 超)は連続性を捨て、分解そのままを採る', () => {
+    const out = unwrapRotation([R(4, 22, 5, 0), R(4, 22, 5, 1), R(-150, 80, 170, 2)]);
+    expect(out[2].v?.slice(3, 6)).toEqual([-150, 80, 170]); // 等価解 (30, 100, -10) へ寄せない
+  });
+  it('y が 60 -> 116° を滑らかに横切るケースは連続のまま(等価解へ切り替わっても 1 フレームの変化が小さい)', () => {
+    const seq: Sample[] = [];
+    for (let i = 0; i <= 56; i++) { const [x, y, z] = canon(10, 60 + i, 20); seq.push(R(x, y, z, i / 30)); }
+    const out = normalizeRotationRuns(unwrapRotation(seq));
+    for (let i = 1; i < out.length; i++) for (const c of [3, 4, 5]) expect(Math.abs((out[i].v as number[])[c] - (out[i - 1].v as number[])[c])).toBeLessThan(5);
+    expect((out[56].v as number[])[4]).toBeCloseTo(116, 6);
+  });
+  it('区間の途中で 360 をまたいでも keyframe 間に 360° の段差を作らない(区間一括の補正)', () => {
+    const seq: Sample[] = [];
+    for (let i = 0; i <= 60; i++) seq.push(R(wrap180(170 + i), 10, 0, i / 30)); // x が 170 -> 230(raw は ±180 で折り返す)
+    const out = normalizeRotationRuns(unwrapRotation(seq));
+    for (let i = 1; i < out.length; i++) expect(Math.abs((out[i].v as number[])[3] - (out[i - 1].v as number[])[3])).toBeLessThan(5);
+    out.forEach((s) => expect(Math.abs((s.v as number[])[3])).toBeLessThanOrEqual(360));
+    // パイプライン: 生成された keyframe の隣り合う手首 x も段差がない
+    const frames: CaptureFrame[] = [];
+    for (let i = 0; i <= 60; i++) frames.push({ time: i / 30, hands: [synthesizeHand(mk([0.1, 0.1, 0.25], [wrap180(170 + i * 1.5), 10, 0]), 'right')] });
+    const r = buildRecordedMotion(frames, { id: 'x', label: '語' });
+    if (!r.ok) throw new Error(r.errors.join());
+    const xs = r.motion.keyframes.map((k) => k.pose.right?.wrist.rotation[0] as number);
+    for (let i = 1; i < xs.length; i++) expect(Math.abs(xs[i] - xs[i - 1])).toBeLessThan(120);
   });
 });
