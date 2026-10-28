@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "kana-e.fingerspelling",
+  "category": "kana-fingerspelling",
+  "provenance": {
+    "status": "unreviewed",
+    "source": "hand-authored placeholder hand shape; not a reviewed fingerspelling chart"
+  },
+  "semantic": {
+    "label": "え",
+    "reading": "え",
+    "gloss": "KANA-E",
+    "lang": "ja"
+  },
+  "duration": 0.6,
+  "keyframes": [
+    {
+      "time": 0,
+      "ease": "ease-in-out",
+      "hold": 0.6,
+      "pose": {
+        "right": {
+          "wrist": {
+            "position": [
+              0.1,
+              0.2,
+              0.25
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              40,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              40,
+              0,
+              0
+            ],
+            "thumbIp": [
+              30,
+              0,
+              0
+            ],
+            "indexMcp": [
+              45,
+              0,
+              0
+            ],
+            "indexPip": [
+              50,
+              0,
+              0
+            ],
+            "indexDip": [
+              30,
+              0,
+              0
+            ],
+            "middleMcp": [
+              45,
+              0,
+              0
+            ],
+            "middlePip": [
+              50,
+              0,
+              0
+            ],
+            "middleDip": [
+              30,
+              0,
+              0
+            ],
+            "ringMcp": [
+              45,
+              0,
+              0
+            ],
+            "ringPip": [
+              50,
+              0,
+              0
+            ],
+            "ringDip": [
+              30,
+              0,
+              0
+            ],
+            "littleMcp": [
+              45,
+              0,
+              0
+            ],
+            "littlePip": [
+              50,
+              0,
+              0
+            ],
+            "littleDip": [
+              30,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

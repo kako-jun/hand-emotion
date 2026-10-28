@@ -147,10 +147,10 @@ describe('UI 文言: モードの線引き', () => {
     expect(UNREVIEWED_BADGE).toBe('未監修・手話風身振り');
     for (const m of PRESET_MOTIONS) expect(provenanceBadge(m)).toBe(UNREVIEWED_BADGE);
   });
-  it('src と index.html に「手話通訳」「手話翻訳」を名乗る文言がない', () => {
+  it('src と index.html に「手話通訳」「手話翻訳」「手話対応」を名乗る文言がない', () => {
     const srcs = import.meta.glob(['../src/**/*.ts', '../index.html'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
     expect(Object.keys(srcs).length).toBeGreaterThan(8);
-    for (const [f, text] of Object.entries(srcs)) expect(text, f).not.toMatch(/手話通訳|手話翻訳/);
-    expect(unknownCaption('x')).not.toMatch(/手話通訳|手話翻訳/);
+    for (const [f, text] of Object.entries(srcs)) expect(text, f).not.toMatch(/手話通訳|手話翻訳|手話対応/);
+    expect(unknownCaption('x')).not.toMatch(/手話通訳|手話翻訳|手話対応/);
   });
 });

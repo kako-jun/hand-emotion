@@ -1,6 +1,8 @@
 // UI の表示文言。モード名は「指文字/身振り支援」。手話そのものを名乗る文言は置かない。
 import type { MotionDefinition } from '../types/definition';
 import { isReviewedSignLanguage } from '../validate';
+import type { ModeKind } from '../modes';
+import type { CueFormat } from '../import/cues';
 
 export const MODE_NAME = '指文字/身振り支援';
 export const UNREVIEWED_BADGE = '未監修・手話風身振り';
@@ -14,3 +16,21 @@ export function provenanceBadge(m: MotionDefinition): string {
 }
 
 export const unknownCaption = (token: string): string => `「${token}」は未登録(無動作)`;
+
+/** モードの表示名と説明。手話そのものを名乗る文言は置かない(線引きは docs/spec.md)。 */
+export const MODE_LABELS: Readonly<Record<ModeKind, Readonly<{ name: string; description: string }>>> = {
+  'caption-wipe': { name: '字幕ワイプ', description: '字幕の語に合う手話風の身振り(未監修)と字幕を出します。登録のない語は字幕のみです。' },
+  'fingerspelling-wipe': { name: '指文字ワイプ', description: 'かなを1文字ずつ指文字風の手の形(未監修・あいうえおのみ)で出します。対応外の文字は字幕のみです。' },
+  'avatar-retarget': { name: 'アバターリターゲット', description: '語彙の身振りを、選んだ骨格(avatar profile)へ流し込んで並べます。' },
+};
+
+export const FORMAT_LABELS: Readonly<Record<CueFormat | 'auto', string>> = {
+  auto: '自動判定',
+  srt: 'SRT',
+  vtt: 'WebVTT',
+  lrc: 'LRC',
+  plain: 'プレーンテキスト(1行3秒)',
+};
+
+export const omittedCaption = (tokens: readonly string[]): string => `速度上限のため身振りを省略(字幕のみ): ${tokens.join(' ')}`;
+export const unsupportedCaption = (tokens: readonly string[]): string => `未対応語(字幕のみ): ${tokens.join(' ')}`;
