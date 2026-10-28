@@ -9,7 +9,15 @@
       #app{display:flex;flex-direction:column;height:100%}
       #panel{padding:10px 14px;display:flex;flex-direction:column;gap:6px;background:#22222c}
       .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-      #text{flex:1;min-width:220px;padding:6px;background:#15151b;color:inherit;border:1px solid #444;border-radius:4px}
+      #text{flex:1;min-width:220px;height:84px;padding:6px;background:#15151b;color:inherit;border:1px solid #444;border-radius:4px;font:12px/1.4 ui-monospace,monospace;resize:vertical}
+      #errors{background:#4a1c1c;color:#ffb4b4;padding:6px 10px;border-radius:4px;font-size:12px;white-space:pre-wrap}
+      #modeDesc{font-size:12px;color:#99a}
+      #cues{margin:0;padding:0;list-style:none;max-height:96px;overflow:auto;font-size:12px;border:1px solid #333;border-radius:4px}
+      #cues li{display:flex;gap:8px;padding:2px 8px;color:#99a}
+      #cues li.active{background:#3a3a66;color:#fff}
+      #cues .t{font-variant-numeric:tabular-nums;color:#778;flex:none}
+      #cues li.active .t{color:#ccd}
+      #notes{min-height:1.2em;font-size:12px;color:#d8c27a}
       button,select{padding:6px 12px;background:#33334a;color:inherit;border:1px solid #555;border-radius:4px;cursor:pointer}
       #seek{flex:1;min-width:200px}
       #badge{background:#5a3b00;color:#ffd48a;padding:2px 8px;border-radius:10px;font-size:12px}
@@ -19,7 +27,7 @@
       canvas{display:block;width:100%;height:100%}
       .rig-label{position:absolute;top:8px;font-size:12px;color:#aab;transform:translateX(-50%)}
       #note{font-size:12px;color:#99a}
-      [hidden]{display:none}
+      [hidden],.row[hidden]{display:none}
     </style>
   </head>
   <body>
@@ -31,13 +39,24 @@
           <span id="note"></span>
         </div>
         <div class="row">
-          <input id="text" type="text" />
+          <textarea id="text" spellcheck="false" placeholder="SRT / WebVTT / LRC / プレーンテキストを貼り付け"></textarea>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label>形式 <select id="format"></select></label>
+            <label>ファイル <input id="file" type="file" accept=".srt,.vtt,.lrc,.txt,text/plain,text/vtt" /></label>
+          </div>
+        </div>
+        <div id="errors" role="alert" hidden></div>
+        <div class="row">
+          <label>モード <select id="modeSel"></select></label>
+          <label id="rigBRow" hidden>右の骨格 <select id="rigB"></select></label>
           <button id="play" type="button">再生</button>
           <button id="stop" type="button">停止</button>
-          <label>右の骨格 <select id="rigB"></select></label>
+          <span id="modeDesc"></span>
         </div>
         <div class="row"><input id="seek" type="range" min="0" max="1000" value="0" /><span id="time"></span></div>
+        <ol id="cues"></ol>
         <div id="caption"></div>
+        <div id="notes"></div>
       </div>
       <div id="stage"><span class="rig-label" id="labelA"></span><span class="rig-label" id="labelB"></span></div>
     </div>
