@@ -11,6 +11,7 @@ import type { CueFormat } from './import/cues';
 import { retargetPose } from './retarget';
 import { buildBrief, exportRetargetBriefMarkdown, exportRetargetBriefYaml, runtimeMotionToString } from './export';
 import { HandRigPair } from './preview/handModel';
+import type { VrmAvatar } from './preview/vrmAvatar';
 import { EXPORT_LABELS, FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption } from './ui/labels';
 import type { ExportKind } from './ui/labels';
 import type { AvatarProfile } from './types/definition';
@@ -58,6 +59,8 @@ light.position.set(1, 2, 3);
 scene.add(light);
 
 const RIG_X = 0.6;
+/** 読み込み済みの VRM(あれば手プレビューの代わりに表示) */
+let avatar: VrmAvatar | null = null;
 const rigA = new HandRigPair(PROFILES.vrm, { colors: { left: 0x6fa8dc, right: 0xf6b26b }, fingerScale: 1.4, palmScale: 1.4 });
 scene.add(rigA.group);
 let rigB: HandRigPair;
@@ -65,7 +68,7 @@ function setRigB(key: keyof typeof PROFILES): void {
   if (rigB) scene.remove(rigB.group);
   rigB = new HandRigPair(PROFILES[key], { colors: { left: 0x93c47d, right: 0xe06666 }, fingerScale: key === 'custom' ? 1.9 : 1.4, palmScale: key === 'custom' ? 1.1 : 1.4 });
   rigB.group.position.set(RIG_X, 0, 0);
-  rigB.group.visible = modeKind() === 'avatar-retarget';
+  rigB.group.visible = modeKind() === 'avatar-retarget' && !avatar;
   scene.add(rigB.group);
   $('labelB').textContent = `${PROFILES[key].id} (${PROFILES[key].capability})`;
 }
@@ -87,8 +90,9 @@ $('labelA').textContent = `${PROFILES.vrm.id} (${PROFILES.vrm.capability})`;
 
 /** モードごとのプレビュー構成: リターゲットのときだけ2骨格を並べ、他は1つの手を中央に出す */
 function layout(): void {
-  const retarget = modeKind() === 'avatar-retarget';
+  const retarget = modeKind() === 'avatar-retarget' && !avatar;
   rigA.group.position.set(retarget ? -RIG_X : 0, 0, 0);
+  rigA.group.visible = !avatar;
   rigB.group.visible = retarget;
   $('labelB').hidden = !retarget;
   $('rigBRow').hidden = !retarget;
@@ -96,7 +100,7 @@ function layout(): void {
 }
 function placeLabels(): void {
   const w = stage.clientWidth;
-  const retarget = modeKind() === 'avatar-retarget';
+  const retarget = modeKind() === 'avatar-retarget' && !avatar;
   const half = RIG_X / (2 * 2.2 * Math.tan((20 * Math.PI) / 180) * camera.aspect);
   $('labelA').style.left = `${w * (retarget ? 0.5 - half : 0.5)}px`;
   $('labelB').style.left = `${w * (0.5 + half)}px`;
@@ -168,12 +172,15 @@ for (const k of Object.keys(EXPORT_LABELS) as ExportKind[]) exportKindSel.add(ne
 const exportProfileSel = $<HTMLSelectElement>('exportProfile');
 for (const k of Object.keys(PROFILES) as (keyof typeof PROFILES)[]) exportProfileSel.add(new Option(`${PROFILES[k].id} (${PROFILES[k].capability})`, k));
 exportProfileSel.value = 'custom';
+function exportProfile(): AvatarProfile {
+  return exportProfileSel.value === 'loaded' && avatar ? avatar.profile : PROFILES[exportProfileSel.value as keyof typeof PROFILES];
+}
 let exportText = '';
 function renderExport(): void {
   if (!plan || !plan.ok) {
     exportText = '';
   } else {
-    const src = buildBrief(plan.timeline, currentMode(), PROFILES[exportProfileSel.value as keyof typeof PROFILES]);
+    const src = buildBrief(plan.timeline, currentMode(), exportProfile());
     const kind = exportKindSel.value as ExportKind;
     exportText = kind === 'runtime-json' ? runtimeMotionToString(src) : kind === 'brief-yaml' ? exportRetargetBriefYaml(src.brief) : exportRetargetBriefMarkdown(src.brief);
   }
@@ -199,6 +206,59 @@ $('exportDownload').addEventListener('click', () => {
   URL.revokeObjectURL(url);
   $('exportStatus').textContent = `${l.file} をダウンロード`;
 });
+// --- VRM(ブラウザ内だけで処理。未読込なら従来の手プレビュー) ---
+const vrmErrors = $('vrmErrors');
+function showVrmErrors(lines: readonly string[]): void {
+  vrmErrors.hidden = lines.length === 0;
+  vrmErrors.textContent = lines.join('\n');
+}
+function setAvatarView(): void {
+  if (avatar) {
+    camera.position.set(0, 1.28, 1.5);
+    camera.lookAt(0, 1.22, 0);
+  } else {
+    camera.position.set(0, 0, 2.2);
+    camera.lookAt(0, 0, 0);
+  }
+  $('vrmClear').hidden = !avatar;
+  $('labelA').textContent = avatar ? `${avatar.profile.id} (${avatar.profile.capability})` : `${PROFILES.vrm.id} (${PROFILES.vrm.capability})`;
+  $('vrmStatus').textContent = avatar ? `${avatar.name}: ${avatar.profile.capability}${avatar.notes.length ? ' / ' + avatar.notes.join(' / ') : ''}` : '';
+  const loaded = exportProfileSel.querySelector('option[value="loaded"]');
+  if (avatar && !loaded) exportProfileSel.add(new Option(`${avatar.profile.id} (${avatar.profile.capability}) 読み込んだ VRM`, 'loaded'));
+  if (!avatar && loaded) {
+    if (exportProfileSel.value === 'loaded') exportProfileSel.value = 'custom';
+    loaded.remove();
+  }
+  layout();
+  renderExport();
+}
+$<HTMLInputElement>('vrmFile').addEventListener('change', async (ev) => {
+  const input = ev.target as HTMLInputElement;
+  const f = input.files?.[0];
+  if (!f) return;
+  showVrmErrors([]);
+  try {
+    const { loadVrm } = await import('./preview/vrmAvatar');
+    const r = await loadVrm(await f.arrayBuffer(), f.name);
+    if (!r.ok) {
+      showVrmErrors(r.errors.map((e, i) => `${i + 1}: ${e}`));
+    } else {
+      avatar?.dispose();
+      avatar = r.avatar;
+      scene.add(avatar.scene);
+      setAvatarView();
+    }
+  } catch (e) {
+    showVrmErrors([`VRM の読み込みに失敗しました: ${e instanceof Error ? e.message : String(e)}`]);
+  }
+  input.value = '';
+});
+$('vrmClear').addEventListener('click', () => {
+  avatar?.dispose();
+  avatar = null;
+  showVrmErrors([]);
+  setAvatarView();
+});
 $<HTMLInputElement>('file').addEventListener('change', async (ev) => {
   const f = (ev.target as HTMLInputElement).files?.[0];
   if (!f) return;
@@ -220,6 +280,7 @@ seek.addEventListener('input', () => {
   time = (Number(seek.value) / 1000) * total();
 });
 
+let lastUnreachable: readonly string[] = [];
 let lastCaption = '';
 let lastNotes = '';
 let lastRetargets: { a: ReturnType<typeof retargetPose>; b: ReturnType<typeof retargetPose> } | null = null;
@@ -237,9 +298,10 @@ function frame(dt: number): void {
   }
   const tl = plan && plan.ok ? plan.timeline : EMPTY_TL;
   const s = sampleCueTimeline(tl, time);
-  const a = retargetPose(s.pose, rigA.profile);
+  const a = retargetPose(s.pose, avatar ? avatar.profile : rigA.profile);
   const b = retargetPose(s.pose, rigB.profile);
-  rigA.apply(a);
+  if (avatar) lastUnreachable = avatar.apply(a, dt);
+  else rigA.apply(a);
   if (rigB.group.visible) rigB.apply(b);
   lastRetargets = { a, b };
   lastPhase = s.phase;
@@ -295,6 +357,8 @@ if (import.meta.env.DEV) {
       rigBVisible: rigB.group.visible,
       rigA: { profile: rigA.profile.id, fallback: lastRetargets?.a.fallback, clamped: lastRetargets?.a.clamped.length, right: rigA.snapshot('right'), left: rigA.snapshot('left') },
       rigB: { profile: rigB.profile.id, fallback: lastRetargets?.b.fallback, clamped: lastRetargets?.b.clamped.length, right: rigB.snapshot('right'), left: rigB.snapshot('left') },
+      vrm: avatar ? { name: avatar.name, profile: avatar.profile.id, capability: avatar.profile.capability, fallback: lastRetargets?.a.fallback, unreachable: lastUnreachable, notes: avatar.notes, left: avatar.snapshot('left'), right: avatar.snapshot('right') } : null,
+      vrmErrors: vrmErrors.hidden ? [] : vrmErrors.textContent.split('\n'),
       fingerA: lastRetargets?.a.right.bones['rightIndexProximal'] ?? null,
       fingerB: lastRetargets?.b.right.bones['Index1.R'] ?? null,
     }),

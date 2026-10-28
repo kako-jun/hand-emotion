@@ -29,6 +29,8 @@
       #note{font-size:12px;color:#99a}
       #export{border-top:1px solid #333;padding-top:6px}
       #exportOut{margin:0;max-height:160px;overflow:auto;padding:6px;background:#15151b;border:1px solid #333;border-radius:4px;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
+      #vrmErrors{background:#4a1c1c;color:#ffb4b4;padding:6px 10px;border-radius:4px;font-size:12px;white-space:pre-wrap}
+      #vrmStatus{font-size:12px;color:#9c9}
       [hidden],.row[hidden]{display:none}
     </style>
   </head>
@@ -47,6 +49,13 @@
             <label>ファイル <input id="file" type="file" accept=".srt,.vtt,.lrc,.txt,text/plain,text/vtt" /></label>
           </div>
         </div>
+        <div class="row">
+          <label>VRM(1.0) <input id="vrmFile" type="file" accept=".vrm,.glb" /></label>
+          <button id="vrmClear" type="button" hidden>VRM を外す</button>
+          <span id="vrmStatus"></span>
+          <span id="note2" style="font-size:12px;color:#99a">ファイルはこのブラウザ内だけで処理し、アップロードしません。未読込のときは手プレビュー</span>
+        </div>
+        <div id="vrmErrors" role="alert" hidden></div>
         <div id="errors" role="alert" hidden></div>
         <div class="row">
           <label>モード <select id="modeSel"></select></label>
