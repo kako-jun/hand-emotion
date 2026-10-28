@@ -30,7 +30,7 @@ export class VrmAvatar {
   }
 
   /** 全ボーンを T-pose に戻してから retarget の結果を書く */
-  apply(pose: RetargetedPose, dt: number): readonly string[] {
+  apply(pose: RetargetedPose, dt: number): Readonly<{ unreachable: readonly Side[]; armOverridden: readonly Side[] }> {
     const out = toVrmPose(pose, this.profile, this.rest);
     for (const side of ['left', 'right'] as const) {
       const b = this.profile.bones[side];
@@ -40,7 +40,7 @@ export class VrmAvatar {
     }
     for (const [name, q] of Object.entries(out.bones)) this.vrm.humanoid.getNormalizedBoneNode(name as never)?.quaternion.set(q[0], q[1], q[2], q[3]);
     this.vrm.update(dt);
-    return out.unreachable;
+    return { unreachable: out.unreachable, armOverridden: out.armOverridden };
   }
 
   snapshot(side: Side): HandSnapshot {

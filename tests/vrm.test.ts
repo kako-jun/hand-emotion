@@ -14,6 +14,7 @@ import { validateAvatarProfile } from '../src/validate';
 import { typedFullMotion, typedMotion } from './typed-samples';
 import { PRESET_MOTIONS } from '../src/text/presets';
 import type { HandPose, Side, Vec3 } from '../src/types/definition';
+import { vrmApplyNotes } from '../src/ui/labels';
 import { applyBones, buildRig, fixturePath, glbJson, readFixture, worldPos } from './vrm-fixture';
 
 const clone = <T>(x: T): any => JSON.parse(JSON.stringify(x));
@@ -467,5 +468,32 @@ describe('GLB 検査の追加(ノード番号・specVersion)', () => {
       const r = inspectVrmGlb(base({ hips: { node: 0 } }, v));
       expect(!r.ok && r.code).toBe('unsupported-version');
     }
+  });
+});
+
+describe('表示用の注意文と特異点への距離', () => {
+  it('vrmApplyNotes: 未適用の arm と届かない手を左右つきで出し、なければ空', () => {
+    expect(vrmApplyNotes({ unreachable: [], armOverridden: [] })).toBe('');
+    expect(vrmApplyNotes({ unreachable: [], armOverridden: ['left', 'right'] })).toBe('肩/肘の指定は IK 優先で未適用(左・右)');
+    expect(vrmApplyNotes({ unreachable: ['right'], armOverridden: ['left'] })).toBe('肩/肘の指定は IK 優先で未適用(左) / 手首が届かず腕を伸ばしきり(右)');
+  });
+  it('同梱モーションの前腕は基準ベクトルの軸(前下45°/後ろ上45°)から 10° 以上離れている', () => {
+    const rig = buildRig('stick-figure.vrm');
+    const axis = new Vector3(0, -1, 1).normalize();
+    let minAngle = 90;
+    for (const m of [...PRESET_MOTIONS, typedMotion]) {
+      const rm = retargetMotion(m as any, rig.profile);
+      for (const k of rm.keyframes) {
+        const base = retargetPose(REST_POSE, rig.profile);
+        const rp = { left: k.pose.left ?? base.left, right: k.pose.right ?? base.right, fallback: rm.fallback, clamped: [] };
+        applyBones(rig, toVrmPose(rp, rig.profile, rig.rest).bones);
+        for (const s of ['left', 'right'] as const) {
+          const u = worldPos(rig.bones[`${s}Hand`]).sub(worldPos(rig.bones[`${s}LowerArm`])).normalize();
+          const a = Math.acos(Math.min(1, Math.abs(u.dot(axis)))) / DEG;
+          minAngle = Math.min(minAngle, a);
+        }
+      }
+    }
+    expect(minAngle).toBeGreaterThan(10);
   });
 });

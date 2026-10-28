@@ -21,9 +21,9 @@ export const REF_ARM_LENGTH = 0.6;
 export const CHEST_TO_SHOULDER = 0.15;
 /** 「まっすぐな手」の手のひら法線の基準(前・下寄り 45°)。前腕方向に直交する成分を取る */
 const PALM_REF = new Vector3(0, -1, 1).normalize();
-/** 肘の曲がる向きの目安(外側は左右で符号を変える) */
 /** これより短い上腕/前腕は IK できない(長さ 0 で NaN になる)ため arms[side] = null にする */
 const MIN_BONE = 1e-4;
+/** 肘の曲がる向きの目安(外側は左右で符号を変える) */
 const POLE = (side: Side): Vector3 => new Vector3(side === 'left' ? 0.3 : -0.3, -1, -0.4);
 
 export type Quat = readonly [number, number, number, number]; // x, y, z, w

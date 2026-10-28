@@ -12,9 +12,9 @@ import { retargetPose } from './retarget';
 import { buildBrief, exportRetargetBriefMarkdown, exportRetargetBriefYaml, runtimeMotionToString } from './export';
 import { HandRigPair } from './preview/handModel';
 import type { VrmAvatar } from './preview/vrmAvatar';
-import { EXPORT_LABELS, FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption } from './ui/labels';
+import { EXPORT_LABELS, FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption, vrmApplyNotes } from './ui/labels';
 import type { ExportKind } from './ui/labels';
-import type { AvatarProfile } from './types/definition';
+import type { AvatarProfile, Side } from './types/definition';
 
 function profile(json: unknown): AvatarProfile {
   const r = validateAvatarProfile(json);
@@ -240,6 +240,7 @@ $<HTMLInputElement>('vrmFile').addEventListener('change', async (ev) => {
   const input = ev.target as HTMLInputElement;
   const f = input.files?.[0];
   if (!f) return;
+  input.value = ''; // 早期 return しても同じファイルを選び直せるよう、取り出した直後にリセット
   const seq = ++loadSeq;
   showVrmErrors([]);
   try {
@@ -262,7 +263,6 @@ $<HTMLInputElement>('vrmFile').addEventListener('change', async (ev) => {
     if (seq !== loadSeq) return;
     showVrmErrors([`VRM の読み込みに失敗しました: ${e instanceof Error ? e.message : String(e)}`]);
   }
-  input.value = '';
 });
 $('vrmClear').addEventListener('click', () => {
   loadSeq++;
@@ -292,7 +292,9 @@ seek.addEventListener('input', () => {
   time = (Number(seek.value) / 1000) * total();
 });
 
-let lastUnreachable: readonly string[] = [];
+let lastApply: { unreachable: readonly Side[]; armOverridden: readonly Side[] } = { unreachable: [], armOverridden: [] };
+/** DEV 検証用: motion の姿勢を差し替える(arm 指定つきなど、同梱語彙にない姿勢の確認) */
+let debugPose: Parameters<typeof retargetPose>[0] | null = null;
 let lastCaption = '';
 let lastNotes = '';
 let lastRetargets: { a: ReturnType<typeof retargetPose>; b: ReturnType<typeof retargetPose> } | null = null;
@@ -310,9 +312,9 @@ function frame(dt: number): void {
   }
   const tl = plan && plan.ok ? plan.timeline : EMPTY_TL;
   const s = sampleCueTimeline(tl, time);
-  const a = retargetPose(s.pose, avatar ? avatar.profile : rigA.profile);
+  const a = retargetPose(debugPose ?? s.pose, avatar ? avatar.profile : rigA.profile);
   const b = retargetPose(s.pose, rigB.profile);
-  if (avatar) lastUnreachable = avatar.apply(a, dt);
+  if (avatar) lastApply = avatar.apply(a, dt);
   else rigA.apply(a);
   if (rigB.group.visible) rigB.apply(b);
   lastRetargets = { a, b };
@@ -326,7 +328,7 @@ function frame(dt: number): void {
     $('caption').textContent = caption;
     lastCaption = caption;
   }
-  const notes = seg ? [seg.unsupported.length ? unsupportedCaption(seg.unsupported) : '', seg.omitted.length ? omittedCaption(seg.omitted) : ''].filter(Boolean).join(' / ') : '';
+  const notes = [seg?.unsupported.length ? unsupportedCaption(seg.unsupported) : '', seg?.omitted.length ? omittedCaption(seg.omitted) : '', avatar ? vrmApplyNotes(lastApply) : ''].filter(Boolean).join(' / ');
   if (notes !== lastNotes) {
     $('notes').textContent = notes;
     lastNotes = notes;
@@ -369,12 +371,13 @@ if (import.meta.env.DEV) {
       rigBVisible: rigB.group.visible,
       rigA: { profile: rigA.profile.id, fallback: lastRetargets?.a.fallback, clamped: lastRetargets?.a.clamped.length, right: rigA.snapshot('right'), left: rigA.snapshot('left') },
       rigB: { profile: rigB.profile.id, fallback: lastRetargets?.b.fallback, clamped: lastRetargets?.b.clamped.length, right: rigB.snapshot('right'), left: rigB.snapshot('left') },
-      vrm: avatar ? { name: avatar.name, profile: avatar.profile.id, capability: avatar.profile.capability, fallback: lastRetargets?.a.fallback, unreachable: lastUnreachable, notes: avatar.notes, left: avatar.snapshot('left'), right: avatar.snapshot('right') } : null,
+      vrm: avatar ? { name: avatar.name, profile: avatar.profile.id, capability: avatar.profile.capability, fallback: lastRetargets?.a.fallback, unreachable: lastApply.unreachable, armOverridden: lastApply.armOverridden, notes: avatar.notes, left: avatar.snapshot('left'), right: avatar.snapshot('right') } : null,
       vrmErrors: vrmErrors.hidden ? [] : vrmErrors.textContent.split('\n'),
       fingerA: lastRetargets?.a.right.bones['rightIndexProximal'] ?? null,
       fingerB: lastRetargets?.b.right.bones['Index1.R'] ?? null,
     }),
     exportState: () => ({ kind: exportKindSel.value, profile: exportProfileSel.value, text: exportText }),
+    setDebugPose: (p: typeof debugPose) => { debugPose = p; },
     seekTo: (t: number) => { time = t; setPlaying(false); },
     play: () => setPlaying(true),
   };

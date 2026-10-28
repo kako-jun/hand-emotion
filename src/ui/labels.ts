@@ -41,3 +41,13 @@ export const EXPORT_LABELS: Readonly<Record<ExportKind, Readonly<{ name: string;
   'brief-yaml': { name: 'retarget 指示書(YAML)', file: 'hand-emotion.retarget-brief.yaml', mime: 'text/yaml' },
   'brief-markdown': { name: '指示書(Markdown)', file: 'hand-emotion.retarget-brief.md', mime: 'text/markdown' },
 };
+
+const SIDE_JA = { left: '左', right: '右' } as const;
+const sidesJa = (sides: readonly ('left' | 'right')[]): string => sides.map((s) => SIDE_JA[s]).join('・');
+/** VRM 適用時の注意(表示用)。肩/肘の指定は IK 優先で適用しない / 手首が届かず腕を伸ばしきった */
+export function vrmApplyNotes(r: Readonly<{ unreachable: readonly ('left' | 'right')[]; armOverridden: readonly ('left' | 'right')[] }>): string {
+  return [
+    r.armOverridden.length ? `肩/肘の指定は IK 優先で未適用(${sidesJa(r.armOverridden)})` : '',
+    r.unreachable.length ? `手首が届かず腕を伸ばしきり(${sidesJa(r.unreachable)})` : '',
+  ].filter(Boolean).join(' / ');
+}
