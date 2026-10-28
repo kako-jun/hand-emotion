@@ -36,7 +36,7 @@
 - **category（言語区分）**: `jsl`（日本手話）/ `kana-fingerspelling`（かな指文字）/ `sign-like-gesture`（手話風身振り）。3区分は混ぜない。
 - **provenance（監修状態）**: `unreviewed`（未監修）/ `reviewed`（監修済み）。`reviewed` は `reviewer` と `reviewedAt`（YYYY-MM-DD）が必須。
 - 「手話」として扱ってよいのは `category=jsl` かつ `reviewed` のみ（`isReviewedSignLanguage`）。
-- **回転の規約**: euler 角（度）`[x,y,z]`、intrinsic XYZ 順。右手のローカル軸で、x = 屈曲（正で指を曲げる／手首は掌屈）、y = ひねり（指の長軸まわり。正で回内）、z = 外転（正で指を開く方向／手首は橈屈）。
+- **回転の規約**: euler 角（度）`[x,y,z]`、intrinsic XYZ 順。右手のローカル軸で、x = 屈曲（正で指を曲げる／手首は掌屈）、y = ひねり（指の長軸まわり。正で回内）、z = 橈側偏位（正で母指側＝橈側へ倒す。手首は橈屈）。指によらず向きは固定で、「指を開く」向きは指ごとに符号が変わる（例: 示指は橈側へ開くのが正、小指は尺側へ開くので負）。
 - **位置の規約**: `wrist.position` は meter、原点は演者の胸中央（胸骨）、+x = 演者の右、+y = 上、+z = 前方。範囲は ±10m（回転の ±360 とは別定義）。
 - **左手は右手の鏡像として表す**: `left` に書く値は「右手と同じ規約で記述した値」で、左手に適用するときに鏡像変換する（位置 x と回転 y・z の符号を反転）。左右対称な動きなら left と right は同じ値になる。
 - `rangeOfMotion`（avatar profile）も右手基準で、左手には鏡像として同じ値を使う。

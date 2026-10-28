@@ -43,9 +43,11 @@ src/types/playback.ts              # 可変の再生状態型。定義への参�
 src/validate/index.ts              # ajv(+ajv-formats) 検証 + スキーマで書けない整合性（timing 昇順・可動域 min<=max）
 src/main.ts                        # Three.js 両手プレースホルダ表示（Phase 1 で置換）
 tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
+tests/typed-samples.ts             # 型付き(as const satisfies)フィクスチャ: サンプル相当 + reviewed/arm/hold/全 ease/jsl 入り
+tests/types.test.ts                # フィクスチャ==サンプル JSON、フィクスチャがスキーマを通ることの確認
 ```
 
-- 型とスキーマは手書きで二重管理している（スキーマが正本）。ずれは `tests/typed-samples.ts`（型 `satisfies` 付きフィクスチャ。`npm run build` の tsc で型との不一致を検出）と `tests/types.test.ts`（フィクスチャ==サンプル JSON かつスキーマ検証を通る）で検知する。生成化は将来検討。
+- 型とスキーマは手書きで二重管理している（スキーマが正本）。ずれの検知は `tests/typed-samples.ts` の型付きフィクスチャ（`as const satisfies`）が前提で、`npm run build` の tsc が型との不一致を、`tests/types.test.ts` がスキーマ検証と JSON サンプルとの一致を見る。**限界: フィクスチャに現れないフィールドの型/スキーマのずれは検知できない**（vitest 単体は型を検査しない。tsc が必要）。生成化は将来検討。
 - 関節回転は euler 角（度）`[x,y,z]`。関節キーは手ごとに 15 個（親指 CMC/MCP/IP、他4指 MCP/PIP/DIP）+ 手首。
 - avatar profile の `capability` が `full` なら全指ボーン必須、`gesture-only` なら指ボーン無しで通る（フォールバック）。VRM humanoid 対応は `bones` に VRM ボーン名（例: `leftIndexProximal`）を入れる。
 
