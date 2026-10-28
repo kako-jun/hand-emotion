@@ -5,12 +5,25 @@ import { LEAD_IN, MAX_SPEED, RETURN_TO_REST, buildCueTimeline, sampleCueTimeline
 import { buildTimeline, sampleTimeline } from '../src/motion/timeline';
 import { samplePose } from '../src/motion/interpolate';
 import { REST_POSE } from '../src/motion/rest';
+import type { FullPose } from '../src/motion/interpolate';
 import { FINGERSPELLING_TRANSITION, planFromText, sequenceForMode, textToFingerspelling } from '../src/modes';
 import type { Mode } from '../src/modes';
 import { checkRangeOfMotion, isReviewedSignLanguage, validateAvatarProfile, validateMotion } from '../src/validate';
 import { MODE_LABELS, FORMAT_LABELS, provenanceBadge } from '../src/ui/labels';
 import vrmJson from '../samples/vrm1-humanoid.avatar-profile.json';
 
+const DEFAULT_SRT = `1
+00:00:00,500 --> 00:00:03,000
+ありがとう こんにちは
+
+2
+00:00:03,500 --> 00:00:06,000
+好き！ あした 食べる
+
+3
+00:00:06,500 --> 00:00:09,000
+歌うよ
+`;
 const items = textToSequence;
 const ct = (cues: { start: number; end: number; text: string }[], f = items) => buildCueTimeline(cues, f);
 const natural = (text: string) => buildTimeline(items(text).filter((i) => i.kind === 'motion')).total;
@@ -107,6 +120,93 @@ describe('キューと身振りの接続(速度上限・省略・待機)', () =>
   });
 });
 
+describe('速度上限は 1.5 倍(spec の値をリテラルで固定)', () => {
+  it('定数は 1.5。1.4 倍で収まるキューは全部再生、1.6 倍が要るキューは末尾を省略する', () => {
+    expect(MAX_SPEED).toBe(1.5);
+    const d = natural('好き 歌う');
+    const ok = ct([{ start: 0, end: d / 1.4, text: '好き 歌う' }]).segments[0];
+    expect(ok.speed).toBeCloseTo(1.4);
+    expect(ok.omitted).toEqual([]);
+    const over = ct([{ start: 0, end: d / 1.6, text: '好き 歌う' }]).segments[0];
+    expect(over.speed).toBeLessThanOrEqual(1.5);
+    expect(over.omitted).toEqual(['歌う']);
+  });
+});
+
+/** 姿勢間の最大差: 手首位置(m)と関節角(度)。連続性の検査用 */
+function poseDistance(a: FullPose, b: FullPose): { pos: number; ang: number } {
+  let pos = 0;
+  let ang = 0;
+  for (const side of ['left', 'right'] as const) {
+    a[side].wrist.position.forEach((v, i) => (pos = Math.max(pos, Math.abs(v - b[side].wrist.position[i]))));
+    for (const j of Object.keys(a[side].joints) as (keyof FullPose['left']['joints'])[]) a[side].joints[j].forEach((v, i) => (ang = Math.max(ang, Math.abs(v - b[side].joints[j][i]))));
+  }
+  return { pos, ang };
+}
+/** 全体を細かく刻み、隣り合う標本の姿勢差の最大(瞬間移動の検出) */
+function maxStep(t: ReturnType<typeof buildCueTimeline>, step = 0.0005): { pos: number; ang: number } {
+  let worst = { pos: 0, ang: 0 };
+  let prev = sampleCueTimeline(t, 0).pose;
+  for (let x = step; x <= t.total + 1; x += step) {
+    const cur = sampleCueTimeline(t, x).pose;
+    const d = poseDistance(prev, cur);
+    worst = { pos: Math.max(worst.pos, d.pos), ang: Math.max(worst.ang, d.ang) };
+    prev = cur;
+  }
+  return worst;
+}
+// 自然な動きの 5ms あたり最大変化の余裕(これを超えれば瞬間移動)
+const STEP_POS = 0.008;
+const STEP_ANG = 1;
+
+describe('姿勢の連続性(境界で手が瞬間移動しない)', () => {
+  it('速度 1.5 のキューの末尾→隙間なしの次キュー', () => {
+    const d = natural('好き 歌う 食べる');
+    const t = ct([
+      { start: 0, end: d / 1.5, text: '好き 歌う 食べる' },
+      { start: d / 1.5, end: d / 1.5 + 3, text: 'ありがとう' },
+    ]);
+    expect(t.segments[0].speed).toBeCloseTo(1.5);
+    const m = maxStep(t);
+    expect(m.pos).toBeLessThan(STEP_POS);
+    expect(m.ang).toBeLessThan(STEP_ANG);
+  });
+  it('隙間なし(0-2s / 2-4s)、短い隙間(0.1s)、字幕のみのキューを挟む場合', () => {
+    for (const cues of [
+      [{ start: 0, end: 2, text: '好き' }, { start: 2, end: 4, text: '歌う' }],
+      [{ start: 0, end: 2, text: '好き' }, { start: 2.1, end: 4, text: '歌う' }],
+      [{ start: 0, end: 2, text: '好き' }, { start: 2, end: 4, text: 'あした' }, { start: 4, end: 6, text: '歌う' }],
+      [{ start: 0, end: 2, text: '好き' }, { start: 1, end: 4, text: '歌う' }],
+    ]) {
+      const m = maxStep(ct(cues));
+      expect(m.pos, JSON.stringify(cues)).toBeLessThan(STEP_POS);
+      expect(m.ang, JSON.stringify(cues)).toBeLessThan(STEP_ANG);
+    }
+  });
+  it('既定サンプル(main.ts の SRT)の全区間で連続', () => {
+    const p = planFromText(DEFAULT_SRT, 'auto', { kind: 'caption-wipe' });
+    if (!p.ok) throw new Error('bad');
+    const m = maxStep(p.timeline);
+    expect(m.pos).toBeLessThan(STEP_POS);
+    expect(m.ang).toBeLessThan(STEP_ANG);
+  });
+  it('指文字モードでも連続', () => {
+    const p = planFromText('1\n00:00:00,000 --> 00:00:01,000\nあいうえお\n\n2\n00:00:01,000 --> 00:00:02,000\nおえういあ', 'auto', { kind: 'fingerspelling-wipe' });
+    if (!p.ok) throw new Error('bad');
+    const m = maxStep(p.timeline);
+    expect(m.pos).toBeLessThan(STEP_POS);
+    expect(m.ang).toBeLessThan(STEP_ANG);
+  });
+  it('区間終端を越えても待機への復帰が続き、境界で止まらない', () => {
+    const d = natural('好き 歌う 食べる');
+    const t = ct([{ start: 0, end: d / 1.5, text: '好き 歌う 食べる' }, { start: 20, end: 22, text: '好き' }]);
+    const end = t.segments[0].end;
+    expect(sampleCueTimeline(t, end + 0.01).phase).toBe('idle');
+    expect(poseDistance(sampleCueTimeline(t, end + 0.01).pose, REST_POSE).pos).toBeGreaterThan(0);
+    expect(sampleCueTimeline(t, end + RETURN_TO_REST + 0.5).pose).toEqual(REST_POSE);
+  });
+});
+
 describe('指文字(最小セット)', () => {
   it('あいうえお、kana-fingerspelling・unreviewed・スキーマ検証済み・手話扱いされない・VRM 可動域内', () => {
     expect(FINGERSPELLING_MOTIONS.map((m) => m.semantic.label)).toEqual(['あ', 'い', 'う', 'え', 'お']);
@@ -127,6 +227,7 @@ describe('指文字(最小セット)', () => {
     expect(toks('アイ、お！')).toEqual(['Mあ', 'Mい', 'Mお']);
     expect(toks('あかさえ')).toEqual(['Mあ', 'Uかさ', 'Mえ']);
     expect(toks('')).toEqual([]);
+    expect(toks('ｱｲ')).toEqual(['Mあ', 'Mい']); // 半角カナは NFKC で全角になる
   });
 });
 
