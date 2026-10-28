@@ -7,12 +7,12 @@ export type SequenceItem =
   | Readonly<{ kind: 'motion'; token: string; motion: MotionDefinition }>
   | Readonly<{ kind: 'unknown'; token: string }>;
 
-/** motion id -> 一致させる表記(label / reading に加えた表記ゆれ・語幹) */
+/** motion id -> 一致させる表記(label / reading に加えた表記ゆれ・活用形。1〜2文字の語幹は誤爆するので置かない) */
 const EXTRA_KEYS: Readonly<Record<string, readonly string[]>> = {
   'arigatou.sign-like': ['ありがと', 'ありがとー'],
-  'suki.sign-like': ['好', 'すき'],
-  'taberu.sign-like': ['食べ', 'たべ'],
-  'utau.sign-like': ['歌', 'うた'],
+  'suki.sign-like': ['好きな', '好きだ', '好きです', 'すきな', 'すきだ', 'すきです'],
+  'taberu.sign-like': ['食べた', '食べて', '食べます', '食べない', 'たべた', 'たべて', 'たべます', 'たべない'],
+  'utau.sign-like': ['歌った', '歌って', '歌います', '歌わない', 'うたった', 'うたって', 'うたいます', 'うたわない'],
 };
 
 export function buildVocabulary(motions: readonly MotionDefinition[]): readonly VocabEntry[] {
@@ -24,7 +24,7 @@ export function buildVocabulary(motions: readonly MotionDefinition[]): readonly 
 
 export const DEFAULT_VOCABULARY: readonly VocabEntry[] = buildVocabulary(PRESET_MOTIONS);
 
-const DELIMITER = /[\s、。，．,.!?！？「」『』()（）\-ー〜~…・]/u;
+const DELIMITER = /[\s、。，．,.!?！？「」『』()（）…・]/u;
 
 export function textToSequence(text: string, vocab: readonly VocabEntry[] = DEFAULT_VOCABULARY): SequenceItem[] {
   const src = text.normalize('NFKC');
@@ -36,9 +36,11 @@ export function textToSequence(text: string, vocab: readonly VocabEntry[] = DEFA
     if (unknown) out.push({ kind: 'unknown', token: unknown });
     unknown = '';
   };
+  const atBoundary = (j: number): boolean => j >= src.length || DELIMITER.test(src[j]) || keys.some(({ k }) => k.length > 2 && src.startsWith(k, j));
   let i = 0;
   while (i < src.length) {
-    const hit = keys.find(({ k }) => src.startsWith(k, i));
+    // 2文字以下の短い表記は、直後が文末・区切り・別の語彙のときだけ一致させる(「すきやき」の「すき」を拾わない)
+    const hit = keys.find(({ k }) => src.startsWith(k, i) && (k.length > 2 || atBoundary(i + k.length)));
     if (hit) {
       flush();
       out.push({ kind: 'motion', token: hit.k, motion: hit.e.motion });

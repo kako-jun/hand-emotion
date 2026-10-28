@@ -123,6 +123,56 @@ describe('初期姿勢補正・腕', () => {
   });
 });
 
+describe('適用順(clamp → 鏡像 → 補正加算)', () => {
+  // y/z 非対称な可動域 + y 成分を持つ補正値で、順序の入れ替えを区別する
+  const p = clone(vrm);
+  p.rangeOfMotion.wrist = { x: [-70, 70], y: [-10, 50], z: [-30, 30] };
+  p.restPoseCorrection = { leftHand: [0, 20, 0], rightHand: [0, 20, 0] };
+  it('可動域内の値: 右は +補正、左は 鏡像後に補正(補正を鏡像しない・鏡像後に clamp しない)', () => {
+    const h = hand({ wristRot: [0, 40, 0] });
+    const r = retargetPose({ left: h, right: h }, p);
+    expect(r.right.bones['rightHand']).toEqual([0, 60, 0]);
+    expect(r.left.bones['leftHand']).toEqual([0, -20, 0]);
+    expect(r.clamped).toEqual([]);
+  });
+  it('可動域外の値は補正前に clamp される(補正後の値は範囲外でもよい)', () => {
+    const h = hand({ wristRot: [0, 80, 0] });
+    const r = retargetPose({ left: h, right: h }, p);
+    expect(r.right.bones['rightHand']).toEqual([0, 70, 0]);
+    expect(r.left.bones['leftHand']).toEqual([0, -30, 0]);
+  });
+});
+
+describe('左手側の指欠損・肩', () => {
+  it('左手だけ指ボーンが欠けても gesture-only(両手とも指を出さない)', () => {
+    const p = clone(vrm);
+    delete p.bones.left.fingers.ringPip;
+    expect(isGestureOnly(p)).toBe(true);
+    const r = retargetPose({ left: hand(), right: hand() }, p);
+    expect(Object.keys(r.right.bones)).toEqual(['rightHand']);
+  });
+  it('shoulder は対応ボーンに出力され、補正加算・左右鏡像が掛かる', () => {
+    const h = hand() as any;
+    h.arm = { shoulder: [10, 0, 0] };
+    const r = retargetPose({ left: h, right: h }, vrm);
+    expect(r.right.bones['rightUpperArm']).toEqual([10, 0, 60]);
+    expect(r.left.bones['leftUpperArm']).toEqual([10, 0, -60]);
+  });
+});
+
+describe('retargetMotion: ease と左手鏡像', () => {
+  it('ease を引き継ぐ', () => {
+    const rm = retargetMotion(typedMotion, vrm);
+    expect(rm.keyframes.map((k) => k.ease)).toEqual(typedMotion.keyframes.map((k) => k.ease));
+  });
+  it('左手は鏡像変換される(位置 x 反転)', () => {
+    const rm = retargetMotion(typedMotion, vrm);
+    const src = typedMotion.keyframes[0].pose.left!.wrist.position;
+    expect(src[0]).not.toBe(0);
+    expect(rm.keyframes[0].pose.left!.wristPosition).toEqual([-src[0], src[1], src[2]]);
+  });
+});
+
 describe('retargetMotion: キーフレーム列', () => {
   it('timing を引き継ぎ、指定のない手は出力しない', () => {
     const rm = retargetMotion(typedMotion, vrm);

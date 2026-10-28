@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyEase, lerpVec3, samplePose, sampleTrack } from '../src/motion/interpolate';
+import { applyEase, lerpHandPose, lerpVec3, samplePose, sampleTrack } from '../src/motion/interpolate';
 import { REST_POSE } from '../src/motion/rest';
 import { validateMotion } from '../src/validate';
 import type { HandPose, MotionDefinition } from '../src/types/definition';
@@ -115,5 +115,27 @@ describe('samplePose: keyframe 補間', () => {
       }
     }
     expect(validateMotion(PRESET_MOTIONS[0]).ok).toBe(true);
+  });
+  it('指関節も補間される(中間値)', () => {
+    const a = hand(0);
+    const b = clone(hand(0)) as any;
+    b.joints.indexPip = [80, 0, 10];
+    b.joints.thumbCmc = [0, 40, 0];
+    const mid = lerpHandPose(a, b, 0.5);
+    expect(mid.joints.indexPip).toEqual([40, 0, 5]);
+    expect(mid.joints.thumbCmc).toEqual([0, 20, 0]);
+    expect(mid.joints.middleDip).toEqual([0, 0, 0]);
+  });
+  it('arm が片側にしかなくても消えず、両側にあれば補間される', () => {
+    const a = clone(hand(0)) as any;
+    a.arm = { elbow: [100, 0, 0], shoulder: [10, 0, 0] };
+    const b = hand(0);
+    expect(lerpHandPose(a, b, 0.5).arm).toEqual(a.arm);
+    expect(lerpHandPose(b, a, 0.5).arm).toEqual(a.arm);
+    const c = clone(hand(0)) as any;
+    c.arm = { elbow: [0, 0, 0] };
+    const mid = lerpHandPose(a, c, 0.5).arm!;
+    expect(mid.elbow).toEqual([50, 0, 0]);
+    expect(mid.shoulder).toEqual([10, 0, 0]);
   });
 });

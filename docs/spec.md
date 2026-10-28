@@ -85,7 +85,7 @@
 
 手話として正確に扱う語は、この段階では扱わず、後で監修前提にする。
 
-Phase 1 の実装: 5語彙はすべて `sign-like-gesture`・`unreviewed`（`presets/` と `samples/arigatou.motion.json`）。テキストは語彙の最長一致で列に変換し（形態素解析はしない）、未知語は無動作で「未登録」と字幕表示する。UI のモード名は「指文字/身振り支援」、常時「未監修・手話風身振り」を表示する。別骨格のデモは `samples/` の VRM / glTF 異名ボーン・狭い可動域 / gesture-only の3 profile を同じ motion に流して並べる。
+Phase 1 の実装: 5語彙はすべて `sign-like-gesture`・`unreviewed`（`presets/` と `samples/arigatou.motion.json`）。テキストは語彙の最長一致で列に変換し（形態素解析はしない。誤爆を避けるため1〜2文字の語幹は置かず活用形を列挙、2文字以下の表記は直後が文末・区切り・別の語彙のときだけ一致）、未知語は無動作で「未登録」と字幕表示する。UI のモード名は「指文字/身振り支援」、常時「未監修・手話風身振り」を表示する。別骨格のデモは `samples/` の VRM / glTF 異名ボーン・狭い可動域 / gesture-only の3 profile を同じ motion に流して並べる。
 
 ## 歌詞/振付との接続
 

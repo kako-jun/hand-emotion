@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PRESET_MOTIONS } from '../src/text/presets';
 import { buildVocabulary, textToSequence } from '../src/text/vocabulary';
+import { samplePose } from '../src/motion/interpolate';
 import { buildTimeline, sampleTimeline, TRANSITION, UNKNOWN_DURATION } from '../src/motion/timeline';
 import { REST_POSE } from '../src/motion/rest';
 import { checkRangeOfMotion, isReviewedSignLanguage, validateAvatarProfile } from '../src/validate';
@@ -56,7 +57,46 @@ describe('テキスト → プリセット列', () => {
   });
 });
 
+describe('誤爆の回帰(短い語幹・長音・ハイフン)', () => {
+  it.each(['うたがう', '好奇心', '歌舞伎', 'すきやき', 'ラーメン', 'a-b'])('「%s」は身振りにならず未知語1区間', (w) => {
+    const s = textToSequence(w);
+    expect(s).toHaveLength(1);
+    expect(s[0].kind).toBe('unknown');
+  });
+  it('活用形は身振りになる', () => {
+    expect(ids(textToSequence('歌って'))).toEqual(['歌う']);
+    expect(ids(textToSequence('好きな'))).toEqual(['好き']);
+    expect(ids(textToSequence('ありがとー'))).toEqual(['ありがとう']);
+  });
+  it('全角・半角ゆれ(NFKC)で一致、区切りで未知語が分かれる', () => {
+    const [m] = PRESET_MOTIONS;
+    const vocab = [{ motion: m, keys: ['ABC'] }];
+    expect(textToSequence('ＡＢＣ', vocab).map((i) => i.kind)).toEqual(['motion']);
+    expect(textToSequence('ABC DEF GHI').map((i) => i.token)).toEqual(['ABC', 'DEF', 'GHI']);
+  });
+});
+
 describe('タイムライン', () => {
+  it('2語目の区間内は samplePose(motion, t - start) と一致し、終端以降は終端姿勢(先頭姿勢ではない)', () => {
+    const tl = buildTimeline(textToSequence('好き 歌う'));
+    const [a, b] = tl.segments;
+    const t = b.start + 0.7;
+    expect(sampleTimeline(tl, t).pose).toEqual(samplePose(b.motion!, t - b.start));
+    const end = samplePose(b.motion!, b.motion!.duration);
+    expect(sampleTimeline(tl, tl.total + 5).pose).toEqual(end);
+    expect(end).not.toEqual(samplePose(b.motion!, 0));
+    expect(a.motion).toBeDefined();
+  });
+  it('語間の遷移は前区間の終端と次区間の先頭の中間(ease-in-out の中点=平均)', () => {
+    const tl = buildTimeline(textToSequence('好き 歌う'));
+    const [a, b] = tl.segments;
+    const from = samplePose(a.motion!, a.motion!.duration).right.wrist.position;
+    const to = samplePose(b.motion!, 0).right.wrist.position;
+    expect(from).not.toEqual(to);
+    const mid = sampleTimeline(tl, a.end + TRANSITION / 2).pose.right.wrist.position;
+    mid.forEach((v, i) => expect(v).toBeCloseTo((from[i] + to[i]) / 2));
+  });
+
   it('区間の並びと遷移間隔、未知語の長さ', () => {
     const tl = buildTimeline(textToSequence('こんにちは あした 好き'));
     const [a, b, c] = tl.segments;
