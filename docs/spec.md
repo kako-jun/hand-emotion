@@ -36,7 +36,11 @@
 - **category（言語区分）**: `jsl`（日本手話）/ `kana-fingerspelling`（かな指文字）/ `sign-like-gesture`（手話風身振り）。3区分は混ぜない。
 - **provenance（監修状態）**: `unreviewed`（未監修）/ `reviewed`（監修済み）。`reviewed` は `reviewer` と `reviewedAt`（YYYY-MM-DD）が必須。
 - 「手話」として扱ってよいのは `category=jsl` かつ `reviewed` のみ（`isReviewedSignLanguage`）。
-- keyframes の `time` は厳密に昇順、`time+hold` は `duration` 以内。左右は `left`/`right` キーのみ、手ごとに指関節15個すべて必須。
+- **回転の規約**: euler 角（度）`[x,y,z]`、intrinsic XYZ 順。右手のローカル軸で、x = 屈曲（正で指を曲げる／手首は掌屈）、y = ひねり（指の長軸まわり。正で回内）、z = 外転（正で指を開く方向／手首は橈屈）。
+- **位置の規約**: `wrist.position` は meter、原点は演者の胸中央（胸骨）、+x = 演者の右、+y = 上、+z = 前方。範囲は ±10m（回転の ±360 とは別定義）。
+- **左手は右手の鏡像として表す**: `left` に書く値は「右手と同じ規約で記述した値」で、左手に適用するときに鏡像変換する（位置 x と回転 y・z の符号を反転）。左右対称な動きなら left と right は同じ値になる。
+- `rangeOfMotion`（avatar profile）も右手基準で、左手には鏡像として同じ値を使う。
+- keyframes の `time` は厳密に昇順、`time+hold` は `duration` 以内（浮動小数誤差 1e-9 を許容）。`reviewedAt` は `format: date` で実在日付を検証する。左右は `left`/`right` キーのみ、手ごとに指関節15個すべて必須。
 
 ### avatar profile（アバター定義）
 
