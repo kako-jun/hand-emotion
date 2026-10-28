@@ -840,3 +840,33 @@ export const typedProfile = {
     ]
   }
 } as const satisfies AvatarProfile;
+
+// サンプルに現れないフィールド(reviewed provenance / arm / hold / 全 ease / jsl)を含む型付きフィクスチャ。
+const zero = [0, 0, 0] as const;
+const joints = {
+  thumbCmc: zero, thumbMcp: zero, thumbIp: zero,
+  indexMcp: zero, indexPip: zero, indexDip: zero,
+  middleMcp: zero, middlePip: zero, middleDip: zero,
+  ringMcp: zero, ringPip: zero, ringDip: zero,
+  littleMcp: zero, littlePip: zero, littleDip: zero,
+} as const;
+const hand = {
+  wrist: { position: [0.1, 0.1, 0.3], rotation: zero },
+  joints,
+  arm: { shoulder: [10, 0, 0], elbow: [90, 0, 0] },
+} as const;
+
+export const typedFullMotion = {
+  schemaVersion: '0.1.0',
+  id: 'fixture.full',
+  category: 'jsl',
+  provenance: { status: 'reviewed', reviewer: 'native signer', reviewedAt: '2026-10-28', source: 'fixture' },
+  semantic: { label: 'テスト', reading: 'てすと', gloss: 'TEST', lang: 'ja' },
+  duration: 4,
+  keyframes: [
+    { time: 0, ease: 'linear', hold: 0.1, pose: { right: hand } },
+    { time: 1, ease: 'ease-in', hold: 0.1, pose: { left: hand } },
+    { time: 2, ease: 'ease-out', hold: 0.1, pose: { left: hand, right: hand } },
+    { time: 3, ease: 'ease-in-out', hold: 0.5, pose: { right: hand } },
+  ],
+} as const satisfies MotionDefinition;

@@ -205,4 +205,21 @@ describe('レビュー指摘の追加ケース', () => {
     d.keyframes[0].hold = -1;
     expect(validateMotion(d).ok).toBe(false);
   });
+  it('可動域の下限割れを検出する(thumbIp.x は [0,100])', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.right.joints.thumbIp = [-5, 0, 0];
+    expect(checkRangeOfMotion(okMotion(d), okProfile()).some((e) => e.includes('/right/thumbIp/x'))).toBe(true);
+  });
+  it('arm.shoulder / arm.elbow の範囲外を検出する', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.right.arm = { shoulder: [120, 0, 0], elbow: [200, 0, 0] };
+    const errs = checkRangeOfMotion(okMotion(d), okProfile());
+    expect(errs.some((e) => e.includes('/right/shoulder/x'))).toBe(true);
+    expect(errs.some((e) => e.includes('/right/elbow/x'))).toBe(true);
+  });
+  it('vec3 が長さ4なら落ちる', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.right.joints.indexMcp = [0, 0, 0, 0];
+    expect(validateMotion(d).ok).toBe(false);
+  });
 });
