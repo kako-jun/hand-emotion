@@ -132,3 +132,77 @@ describe('avatar profile', () => {
     expect(validateAvatarProfile(d).ok).toBe(false);
   });
 });
+
+describe('レビュー指摘の追加ケース', () => {
+  const okMotion = (d: unknown) => {
+    const r = validateMotion(d);
+    if (!r.ok) throw new Error(r.errors.join());
+    return r.value;
+  };
+  const okProfile = () => {
+    const r = validateAvatarProfile(profileSample);
+    if (!r.ok) throw new Error('invalid sample');
+    return r.value;
+  };
+
+  it('timing 境界: time 0.1 + hold 1.1 = duration 1.2 は通る(浮動小数誤差)', () => {
+    const d = clone(motionSample);
+    d.duration = 1.2;
+    d.keyframes = [{ ...d.keyframes[0], time: 0.1, hold: 1.1 }];
+    expect(validateMotion(d).ok).toBe(true);
+  });
+  it('timing 境界: 実際に超過すれば落ちる', () => {
+    const d = clone(motionSample);
+    d.duration = 1.2;
+    d.keyframes = [{ ...d.keyframes[0], time: 0.1, hold: 1.2 }];
+    expect(validateMotion(d).ok).toBe(false);
+  });
+  it('full の profile で右手の指ボーンが欠けると落ちる', () => {
+    const d = clone(profileSample);
+    delete d.bones.right.fingers.littleDip;
+    expect(validateAvatarProfile(d).ok).toBe(false);
+    const e = clone(profileSample);
+    delete e.bones.right.fingers;
+    expect(validateAvatarProfile(e).ok).toBe(false);
+  });
+  it('左手の可動域超過を検出する', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.left.joints.middlePip = [170, 0, 0];
+    expect(checkRangeOfMotion(okMotion(d), okProfile()).some((e) => e.includes('/left/middlePip/x'))).toBe(true);
+  });
+  it('手首の可動域超過を検出する', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.right.wrist.rotation = [120, 0, 0];
+    expect(checkRangeOfMotion(okMotion(d), okProfile()).some((e) => e.includes('/right/wrist/x'))).toBe(true);
+  });
+  it('reviewer はあるが reviewedAt が無い provenance は落ちる', () => {
+    const d = clone(motionSample);
+    d.provenance = { status: 'reviewed', reviewer: 'native signer' };
+    expect(validateMotion(d).ok).toBe(false);
+  });
+  it('reviewedAt が不正な日付(2026-13-99)は落ちる', () => {
+    const d = clone(motionSample);
+    d.provenance = { status: 'reviewed', reviewer: 'x', reviewedAt: '2026-13-99' };
+    expect(validateMotion(d).ok).toBe(false);
+    d.provenance.reviewedAt = '2026-02-30';
+    expect(validateMotion(d).ok).toBe(false);
+  });
+  it('vec3 が長さ2なら落ちる(回転・位置とも)', () => {
+    const a = clone(motionSample);
+    a.keyframes[0].pose.right.joints.indexMcp = [0, 0];
+    expect(validateMotion(a).ok).toBe(false);
+    const b = clone(motionSample);
+    b.keyframes[0].pose.right.wrist.position = [0, 0];
+    expect(validateMotion(b).ok).toBe(false);
+  });
+  it('位置は±10m を超えると落ちる(回転用±360の流用ではない)', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].pose.right.wrist.position = [100, 0, 0];
+    expect(validateMotion(d).ok).toBe(false);
+  });
+  it('hold が負なら落ちる', () => {
+    const d = clone(motionSample);
+    d.keyframes[0].hold = -1;
+    expect(validateMotion(d).ok).toBe(false);
+  });
+});
