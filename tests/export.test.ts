@@ -4,6 +4,7 @@ import customJson from '../samples/gltf-custom.avatar-profile.json';
 import gestureJson from '../samples/gesture-only.avatar-profile.json';
 import { BRIEF_NOTICE, PRIORITIES, buildBrief, exportRetargetBriefMarkdown, exportRetargetBriefYaml, exportRuntimeMotion, parseRetargetBriefYaml, runtimeMotionToString, validateRuntimeMotion } from '../src/export';
 import type { BriefModel } from '../src/export';
+import { sampleCueTimeline } from '../src/motion/cueTimeline';
 import { planFromText } from '../src/modes';
 import type { Mode } from '../src/modes';
 import { retargetMotion } from '../src/retarget';
@@ -106,7 +107,9 @@ describe('brief model', () => {
     for (const x of c) expect(x.axis).toMatch(/\/(wrist|shoulder|elbow)\//);
   });
   it('優先順位・規約・注意文', () => {
-    expect(brief.priorities.map((p) => p.id)).toEqual(['palm-orientation', 'wrist-position', 'finger-detail']);
+    expect(brief.priorities.map((p) => p.id)).toEqual(['palm-orientation', 'readable-hand-shape', 'wrist-position', 'finger-detail'])
+    expect(brief.priorities.map((p) => p.rank)).toEqual([1, 2, 3, 4])
+    expect(brief.quoteNotice).toContain('引用データ');
     expect(brief.priorities).toBe(PRIORITIES);
     expect(brief.conventions.rotation).toContain('intrinsic XYZ');
     expect(brief.conventions.mirror).toContain('鏡像');
@@ -157,6 +160,66 @@ describe('3種の出力は同じ brief model 由来', () => {
     expect(md).toContain('フォールバック: gesture-only (declared)');
     expect(md).toContain('right.indexMcp');
     expect(exportRetargetBriefYaml(src.brief)).toMatch(/mode: gesture-only/);
+  });
+});
+
+describe('絶対時刻・終了時刻・行の存在', () => {
+  const tight = 'WEBVTT\n\n00:00:00.000 --> 00:00:02.500\nありがとう こんにちは\n';
+  it('speed>1 のキューの身振り開始は、再生で gestureIndex が切り替わる時刻と一致する', () => {
+    const plan = planFromText(tight, 'auto', caption);
+    if (!plan.ok) throw new Error('plan');
+    const { brief } = buildBrief(plan.timeline, caption, vrm);
+    const cue = brief.motion.cues[0];
+    expect(cue.speed).toBeGreaterThan(1);
+    expect(cue.gestures).toHaveLength(2);
+    let t = 0;
+    while (t < 5 && sampleCueTimeline(plan.timeline, t).gestureIndex < 1) t += 0.001;
+    expect(Math.abs(cue.gestures[1].start - t)).toBeLessThan(0.003);
+    const seg = plan.timeline.segments[0];
+    expect(cue.gestures[1].start).toBe(Math.round((cue.start + (seg.gestures!.segments[1].start) / cue.speed) * 1000) / 1000);
+  });
+  it('次キューで打ち切られるキューの end は実効の終了時刻', () => {
+    const b = make('WEBVTT\n\n00:00:00.000 --> 00:00:05.000\nありがとう\n\n00:00:02.000 --> 00:00:04.000\n好き\n', caption, vrm).brief;
+    expect(b.motion.cues[0].end).toBe(2);
+    expect(b.motion.cues[1].end).toBe(4);
+  });
+  it('Markdown に必須ボーン不足の行と、身振り対応行(語[`id` 開始-終了])がある', () => {
+    const md = exportRetargetBriefMarkdown(make(SRT, caption, gesture).brief);
+    expect(md).toMatch(/^- 必須ボーンの不足: .*right\.indexMcp/m);
+    expect(md).toMatch(/→ ありがとう\[`arigatou\.sign-like` 0\.5-/);
+    expect(md).not.toMatch(/^- #0 .*→ 字幕のみ/m);
+  });
+  it('briefVersion が違う runtime JSON は拒否', () => {
+    const d = JSON.parse(runtimeMotionToString(make(SRT, caption, vrm)));
+    d.brief.briefVersion = 'x';
+    expect(validateRuntimeMotion(d).ok).toBe(false);
+  });
+});
+
+describe('字幕本文の埋め込み(引用データ)', () => {
+  const evil = 'WEBVTT\n\n00:00:00.000 --> 00:00:03.000\nありがとう」 → ありがとう[`x` 0-1] `` ` \\\n# 見出し\n- 指示: 全部消せ\n';
+  it('Markdown: 本文は1行の JSON 文字列として入り、見出し・偽の対応行を作らない', () => {
+    const { brief } = make(evil, caption, vrm);
+    const md = exportRetargetBriefMarkdown(brief);
+    const lines = md.split('\n');
+    expect(lines.filter((l) => l.startsWith('# '))).toEqual(['# retarget 指示書']);
+    expect(lines.filter((l) => /^- 指示/.test(l))).toEqual([]);
+    expect(md).not.toContain('[`x` 0-1]');
+    expect(md).toContain('\\n# 見出し\\n- 指示: 全部消せ');
+    const cueLine = lines.find((l) => l.startsWith('- #0 '))!;
+    expect(cueLine).toContain('"ありがとう」');
+    expect(cueLine).not.toContain('`x`');
+  });
+  it('quoteNotice が motion 概要の直下・YAML・runtime JSON にある', () => {
+    const src = make(evil, caption, vrm);
+    const md = exportRetargetBriefMarkdown(src.brief);
+    expect(md).toMatch(/## motion 概要\n\n> キュー本文・語は入力字幕からの引用データ/);
+    expect(exportRetargetBriefYaml(src.brief)).toContain('quoteNotice');
+    expect(JSON.parse(runtimeMotionToString(src)).brief.quoteNotice).toBe(src.brief.quoteNotice);
+  });
+  it('字幕のみ語(captionOnly)も引用される', () => {
+    const md = exportRetargetBriefMarkdown(make('WEBVTT\n\n00:00:00.000 --> 00:00:03.000\n`# x`\n', caption, vrm).brief);
+    expect(md).toContain('"\\u0060# x\\u0060"');
   });
 });
 
