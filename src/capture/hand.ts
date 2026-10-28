@@ -14,6 +14,8 @@ import type { CaptureSettings, DetectedHand, Landmark } from './types';
 import { REFERENCE_ARM_LENGTH } from './types';
 
 // --- 腕の基準体型(vrmPose.ts の IK と同じ形。肩幅だけ基準値) ---
+/** 骨の向きの (Y', Z') 平面への射影の長さ(単位ベクトルに対する比)がこれ未満なら、屈曲角を決めない */
+export const MIN_PLANE_RATIO = 0.25;
 const UPPER = 0.3;
 const FORE = 0.3;
 const CHEST_TO_SHOULDER = 0.15;
@@ -142,9 +144,11 @@ export function handToPose(hand: DetectedHand, settings: CaptureSettings): HandC
   const rotation: Vec3 = [e[0], e[1], -e[2]];
 
   // 指の屈曲: 手の局所座標で、骨の向きの (Y', Z') 平面内の角度。屈曲は Y' から Z'(手のひら側)へ曲げる向きが正
+  // 骨の向きが (Y', Z') 平面とほぼ直交する(例: 母指が X' 方向へ開く)と角度が不安定なので NaN にする(時系列側が直前の値で保持/補間する)
   const angle = (a: V3, b: V3): number | null => {
     const d = normalize(sub(b, a));
-    return d ? Math.atan2(dot(d, Z), dot(d, Y)) / DEG : null;
+    if (!d) return null;
+    return Math.hypot(dot(d, Y), dot(d, Z)) < MIN_PLANE_RATIO ? NaN : Math.atan2(dot(d, Z), dot(d, Y)) / DEG;
   };
   const joints = {} as Record<FingerJoint, Vec3>;
   for (const [names, ids] of FINGER_CHAINS) {

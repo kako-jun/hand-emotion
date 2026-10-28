@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { Quaternion, Vector3 } from 'three';
 import { classifyCameraError, classifyModelError } from '../src/capture/errors';
 import { estimateForearm, handReferenceFrame, handToPose, resolveSide } from '../src/capture/hand';
-import { matToEuler, eulerToMat, wrap180 } from '../src/capture/math';
+import { matToEuler, eulerToMat, mul, transpose, wrap180 } from '../src/capture/math';
 import type { V3 } from '../src/capture/math';
 import { RECORDED_SOURCE, buildRecordedMotion, rangeWarnings } from '../src/capture/motion';
-import { channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, unwrapRotation } from '../src/capture/series';
+import { DEFAULT_OUTLIER, channelsToPose, decimate, fillGaps, poseToChannels, removeOutliers, smooth, unwrapRotation, wrapRotation } from '../src/capture/series';
 import type { Sample } from '../src/capture/series';
 import { DEFAULT_SETTINGS } from '../src/capture/types';
 import type { CaptureFrame, CaptureSettings, DetectedHand } from '../src/capture/types';
+import { MIN_PLANE_RATIO } from '../src/capture/hand';
 import { handReferenceFrame as vrmReferenceFrame, toVrmPose } from '../src/avatar/vrmPose';
 import { samplePose } from '../src/motion/interpolate';
 import { REST_POSE } from '../src/motion/rest';
@@ -34,6 +35,13 @@ const mk = (position: Vec3, rotation: Vec3, flex: Partial<Record<FingerJoint, nu
   const joints = flat();
   for (const [j, v] of Object.entries(flex)) joints[j as FingerJoint] = [v, 0, 0];
   return { wrist: { position, rotation }, joints };
+};
+/** 2 つの euler(motion の規約: z は橈屈で符号反転)が表す向きの差(度) */
+const rotAngle = (a: Vec3, b: Vec3): number => {
+  const m = (e: Vec3): ReturnType<typeof eulerToMat> => eulerToMat([e[0], e[1], -e[2]]);
+  const r = mul(transpose(m(a)), m(b));
+  const tr = r[0][0] + r[1][1] + r[2][2];
+  return (Math.acos(Math.min(1, Math.max(-1, (tr - 1) / 2))) * 180) / Math.PI;
 };
 const angDiff = (a: number, b: number): number => Math.abs(wrap180(a - b));
 
@@ -241,16 +249,45 @@ describe('時系列処理', () => {
     expect(r.longGaps).toHaveLength(1);
     expect(r.longGaps[0]).toBeCloseTo(11 / 30, 9);
   });
-  it('外れ値除去: 1 フレームだけ位置が飛んだ/角度が飛んだサンプルを落とす。滑らかな大きな動きは残す', () => {
+  it('外れ値除去(チャンネル単位): 外れたチャンネルだけ NaN にし、他のチャンネルは残す。滑らかな大きな動きは残す', () => {
     const s = ts(15, (i) => v(i * 0.01));
     s[7] = { t: s[7].t, v: v(1.5) };
     s[10] = { t: s[10].t, v: [0.1, 0, 0, 170, 0, 0, ...new Array(15).fill(0)] };
     const r = removeOutliers(s);
     expect(r.removed).toBe(2);
-    expect(r.samples[7].v).toBeNull();
-    expect(r.samples[10].v).toBeNull();
+    expect(r.samples[7].v?.[0]).toBeNaN();
+    expect(r.samples[7].v?.[1]).toBe(0);
+    expect(r.samples[10].v?.[3]).toBeNaN();
+    expect(r.samples[10].v?.[0]).toBeCloseTo(0.1, 9); // 位置は残る
     const smoothRamp = ts(15, (i) => [0, 0, 0, i * 12, 0, 0, ...new Array(15).fill(0)]); // 1 フレーム 12° の速い回転
     expect(removeOutliers(smoothRamp).removed).toBe(0);
+    // NaN は fillGaps が前後から補間する
+    const f = fillGaps(r.samples, 0.3).samples;
+    expect(f[7].v?.[0]).toBeCloseTo(0.07, 9);
+    expect(f.every((x) => x.v?.every(Number.isFinite))).toBe(true);
+  });
+  it('外れ値の既定は近傍 3 つ以上で判定、手首 euler は範囲内なら 180 を超えても変えず ±360 に収める', () => {
+    expect(DEFAULT_OUTLIER.minNeighbors).toBe(3);
+    const two = ts(4, (i) => (i === 0 ? v(0) : i === 1 ? v(5) : null));
+    expect(removeOutliers(two, { window: 2, positionThreshold: 0.12, angleThreshold: 70 }).removed).toBe(0);
+    const w = wrapRotation([0, 0, 0, 200, -250, 400, ...new Array(15).fill(0)]);
+    expect(w.slice(3, 6)).toEqual([200, -250, 40]);
+  });
+  it('外れ値除去: 窓の有効値が minNeighbors 未満なら判定しない(3 つあれば判定する)', () => {
+    const two = ts(6, (i) => (i === 0 ? v(0) : i === 1 ? v(5) : null));
+    expect(removeOutliers(two).removed).toBe(0);
+    const three = ts(6, (i) => (i < 2 ? v(0) : i === 2 ? v(5) : null));
+    expect(removeOutliers(three).removed).toBe(1);
+  });
+  it('欠落補間の境界: 前後の間隔が maxGap ちょうどなら補間、超えれば補間しない。チャンネル NaN の長い欠落は直前値で保持', () => {
+    const at = (gapFrames: number): Sample[] => ts(gapFrames + 2, (i) => (i === 0 ? v(0) : i === gapFrames + 1 ? v(1) : null), 0.1);
+    expect(fillGaps(at(2), 0.3).samples[1].v).not.toBeNull(); // 間隔 0.3
+    expect(fillGaps(at(3), 0.3).samples[1].v).toBeNull(); // 間隔 0.4
+    const nan = ts(8, (i) => (i === 0 ? v(0.5) : i === 7 ? v(0.9) : [NaN, ...v(0).slice(1)]), 0.2);
+    expect(fillGaps(nan, 0.3).samples[3].v?.[0]).toBeCloseTo(0.5, 9);
+    const edge = ts(4, (i) => (i === 0 ? v(0) : i === 3 ? v(0.3) : [NaN, ...v(0).slice(1)]), 0.1); // NaN の前後の間隔が 0.3 ちょうど
+    expect(fillGaps(edge, 0.3).samples[1].v?.[0]).toBeCloseTo(0.1, 9);
+    expect(fillGaps(edge, 0.29).samples[1].v?.[0]).toBeCloseTo(0, 9);
   });
   it('平滑: ノイズを減らし、零位相(ゆっくりした波はずれない)で、欠落をまたがない', () => {
     const noisy = ts(90, (i) => v(Math.sin((2 * Math.PI * i) / 90) * 0.2 + (i % 2 ? 0.02 : -0.02)));
@@ -266,6 +303,12 @@ describe('時系列処理', () => {
     expect(g[4].v?.[0]).toBeCloseTo(0, 9);
     expect(g[6].v?.[0]).toBeCloseTo(1, 9);
     expect(smooth(noisy, 0)[3].v).toEqual(noisy[3].v);
+  });
+  it('平滑の零位相: 1Hz の強い平滑でも波のピーク位置がずれない(後ろ向きパスがないと数フレーム遅れる)', () => {
+    const clean = ts(90, (i) => v(Math.sin((2 * Math.PI * i) / 90)));
+    const out = smooth(clean, 1);
+    const peak = out.reduce((best, s, i) => ((s.v as number[])[0] > (out[best].v as number[])[0] ? i : best), 0);
+    expect(Math.abs(peak - 22)).toBeLessThanOrEqual(1);
   });
   it('euler の ±180 またぎを unwrap し、ジャンプが外れ値扱いにならない', () => {
     const s = ts(8, (i) => [0, 0, 0, wrap180(170 + i * 4), 0, 0, ...new Array(15).fill(0)]);
@@ -345,6 +388,7 @@ describe('録画 -> motion 定義', () => {
       const want = truth(t);
       got.wrist.position.forEach((x, i) => expect(Math.abs(x - want.wrist.position[i]), `pos ${t}`).toBeLessThan(0.03));
       expect(angDiff(got.joints.indexMcp[0], want.joints.indexMcp[0]), `index ${t}`).toBeLessThan(10);
+      expect(rotAngle(got.wrist.rotation, want.wrist.rotation), `rot ${t}`).toBeLessThan(6);
     }
   });
   it('欠落フレームは補間され、外れ値(一瞬別の姿勢)は除かれる', () => {
@@ -495,5 +539,172 @@ describe('録画 UI の文言', () => {
   it('カメラのエラー種別ごとに文言がある(権限拒否 / なし / 使用中 / 未対応 / モデル取得失敗)', () => {
     for (const k of ['denied', 'no-device', 'in-use', 'unsupported', 'model-unavailable', 'unknown'] as const) expect(CAPTURE_ERROR_LABELS[k].length).toBeGreaterThan(5);
     expect(CAPTURE_ERROR_LABELS['model-unavailable']).toMatch(/モデル/);
+  });
+});
+
+describe('手首 euler のジンバル付近(y = ±90°)', () => {
+  const run = (y: (i: number) => number, side: Side = 'right'): { got: Vec3; want: Vec3 }[] => {
+    const frames: CaptureFrame[] = [];
+    const truth = (i: number): HandPose => mk([0.1, 0.1, 0.25], [20, y(i), 10], { indexMcp: 20 });
+    for (let i = 0; i <= 60; i++) frames.push({ time: i / 30, hands: [synthesizeHand(truth(i), side)] });
+    const r = buildRecordedMotion(frames, { id: 'g', label: '語' });
+    if (!r.ok) throw new Error(r.errors.join());
+    const out: { got: Vec3; want: Vec3 }[] = [];
+    for (let t = 0.2; t < 1.8; t += 0.1) out.push({ got: samplePose(r.motion, t)[side].wrist.rotation, want: truth(Math.round(t * 30)).wrist.rotation });
+    return out;
+  };
+  for (const [name, y] of [['90±0.5', (i: number) => 90 + (i % 2 ? 0.5 : -0.5)], ['-90±1', (i: number) => -90 + (i % 2 ? 1 : -1)], ['85(対照)', () => 85], ['88(対照)', () => 88]] as const) {
+    it(`y=${name}: 再生の向き誤差が数度以内(右手・左手)`, () => {
+      for (const side of ['right', 'left'] as const) for (const { got, want } of run(y, side)) expect(rotAngle(got, want)).toBeLessThan(4);
+    });
+  }
+  it('等価解の選択: unwrapRotation は直前に近い方を選び、y が 90 を超えて続いてよい', () => {
+    const rot = (x: number, y: number, z: number): Sample => ({ t: 0, v: [0, 0, 0, x, y, z, ...new Array(15).fill(0)] });
+    const out = unwrapRotation([rot(20, 89.5, 10), rot(20 + 180, 180 - 90.5, 10 - 180), rot(20, 89.5, 10)].map((x, i) => ({ ...x, t: i })));
+    expect(out[1].v?.slice(3, 6)).toEqual([20, 90.5, 10]); // 分解が (200, 89.5, -170) へ飛んでも、直前に近い等価解(y が 90 を超える)を選ぶ
+    const high = unwrapRotation([rot(20, 85, 10), rot(200, 88, -170)].map((x, i) => ({ ...x, t: i })));
+    expect(high[1].v?.[4]).toBeCloseTo(92, 9);
+  });
+});
+
+describe('母指が横に開いたときの屈曲角の安定', () => {
+  /** 母指 2-4 を X'(橈側)方向へ伸ばし、world に ±3mm のノイズを乗せる */
+  const frames = (): CaptureFrame[] => {
+    const out: CaptureFrame[] = [];
+    let seed = 7;
+    const rnd = (): number => { seed = (seed * 16807) % 2147483647; return (seed / 2147483647 - 0.5) * 0.006; };
+    for (let i = 0; i <= 60; i++) {
+      const h = synthesizeHand(mk([0.1, 0.1, 0.25], [0, 0, 0]), 'right');
+      const w = h.worldLandmarks.map((l) => ({ ...l }));
+      const sub = (a: number, b: number): [number, number, number] => [w[a].x - w[b].x, w[a].y - w[b].y, w[a].z - w[b].z];
+      const rad = sub(5, 17);
+      const n = Math.hypot(...rad);
+      for (const [id, d] of [[2, 0.03], [3, 0.055], [4, 0.075]] as const) {
+        w[id] = { x: w[1].x + (rad[0] / n) * d + rnd(), y: w[1].y + (rad[1] / n) * d + rnd(), z: w[1].z + (rad[2] / n) * d + rnd() };
+      }
+      out.push({ time: i / 30, hands: [{ ...h, worldLandmarks: w }] });
+    }
+    return out;
+  };
+  it('不安定な母指の角度は NaN になり(閾値 MIN_PLANE_RATIO)、他の指の角度は有限', () => {
+    const r = handToPose(frames()[0].hands[0], DEFAULT_SETTINGS);
+    if (!r.ok) throw new Error('x');
+    expect(MIN_PLANE_RATIO).toBeGreaterThan(0);
+    expect(Number.isNaN(r.pose.joints.thumbMcp[0])).toBe(true);
+    expect(Number.isFinite(r.pose.joints.indexMcp[0])).toBe(true);
+    expect(Number.isFinite(r.pose.wrist.rotation[0])).toBe(true);
+  });
+  it('フレーム全体が外れ値で捨てられず、手首と他の指は全フレーム残り、motion は有限値で通る', () => {
+    const fs = frames();
+    const samples: Sample[] = fs.map((f) => {
+      const r = handToPose(f.hands[0], DEFAULT_SETTINGS);
+      return { t: f.time, v: r.ok ? poseToChannels(r.pose) : null };
+    });
+    const cleaned = removeOutliers(unwrapRotation(samples));
+    // 手首(0-5)・示指〜小指(9-20)のチャンネルは全フレームで有限(捨てられていない)
+    for (const x of cleaned.samples) for (const c of [0, 1, 2, 3, 4, 5, ...Array.from({ length: 12 }, (_, i) => 9 + i)]) expect(Number.isFinite(x.v?.[c] as number)).toBe(true);
+    const r = buildRecordedMotion(fs, { id: 'thumb', label: '語' });
+    if (!r.ok) throw new Error(r.errors.join());
+    expect(r.motion.keyframes.every((k) => Object.values(k.pose.right?.joints ?? {}).every((j) => j.every(Number.isFinite)))).toBe(true);
+    expect(Math.abs(r.motion.keyframes[0].pose.right?.joints.indexMcp[0] ?? 99)).toBeLessThan(5);
+  });
+});
+
+describe('録画パイプラインの境界', () => {
+  const clean = (n = 60, score = 0.9) => {
+    const fr: CaptureFrame[] = [];
+    for (let i = 0; i <= n; i++) {
+      const c = i / n;
+      fr.push({ time: i / 30, hands: [{ ...synthesizeHand(mk([0.05 + 0.2 * c, 0.1, 0.25], [0, 0, 0], { indexMcp: 40 * c }), 'right'), score }] });
+    }
+    return fr;
+  };
+  it('同じ側が複数検出されたらスコアの高い方を使う(順序によらない)', () => {
+    const good = clean();
+    const bogus = (h: DetectedHand): DetectedHand => ({ ...synthesizeHand(mk([-0.2, -0.3, 0.1], [0, 0, 0], { indexMcp: 80 }), 'right'), score: 0.2 });
+    for (const lowFirst of [true, false]) {
+      const fr = good.map((f) => ({ ...f, hands: lowFirst ? [bogus(f.hands[0]), f.hands[0]] : [f.hands[0], bogus(f.hands[0])] }));
+      const r = buildRecordedMotion(fr, { id: 'd', label: '語' });
+      const ref = buildRecordedMotion(good, { id: 'd', label: '語' });
+      if (!r.ok || !ref.ok) throw new Error('x');
+      expect(r.motion).toEqual(ref.motion);
+      expect(r.warnings.some((w) => w.kind === 'duplicate-side')).toBe(true);
+    }
+  });
+  it('フレームは時刻順に並べ直し、1ms 未満で重なる重複時刻は捨てる', () => {
+    const fr = clean();
+    const ref = buildRecordedMotion(fr, { id: 'o', label: '語' });
+    const rev = buildRecordedMotion([...fr].reverse(), { id: 'o', label: '語' });
+    if (!ref.ok || !rev.ok) throw new Error('x');
+    expect(rev.motion).toEqual(ref.motion);
+    expect(rev.stats.frames).toBe(fr.length);
+    const dup = buildRecordedMotion(fr.flatMap((f) => [f, { ...f, time: f.time + 0.0005 }]), { id: 'o', label: '語' });
+    if (!dup.ok) throw new Error('x');
+    expect(dup.stats.frames).toBe(fr.length);
+    expect(dup.motion).toEqual(ref.motion);
+  });
+  it('2 フレームしか映らなかった手は dropped-hand 警告で捨てる(最低 3 フレーム)', () => {
+    const fr = clean().map((f, i) => ({ ...f, hands: i < 2 ? [...f.hands, synthesizeHand(mk([0.1, 0.1, 0.25], [0, 0, 0]), 'left')] : f.hands }));
+    const r = buildRecordedMotion(fr, { id: 'm', label: '語' });
+    if (!r.ok) throw new Error('x');
+    expect(r.warnings).toContainEqual({ kind: 'dropped-hand', side: 'left', frames: 2 });
+    expect(r.motion.keyframes.every((k) => !k.pose.left)).toBe(true);
+  });
+  it('欠落の既定 maxGap=0.3 秒: 0.3 秒の欠落は補間し、それより長いと long-gap 警告', () => {
+    const drop = (n: number): CaptureFrame[] => clean().map((f, i) => (i >= 20 && i < 20 + n ? { ...f, hands: [] } : f));
+    const ok = buildRecordedMotion(drop(8), { id: 'g', label: '語' }); // 前後の間隔 9/30 = 0.3
+    const long = buildRecordedMotion(drop(9), { id: 'g', label: '語' }); // 10/30
+    if (!ok.ok || !long.ok) throw new Error('x');
+    expect(ok.warnings.some((w) => w.kind === 'long-gap')).toBe(false);
+    expect(long.warnings.some((w) => w.kind === 'long-gap')).toBe(true);
+  });
+  it('トリム: 区間に 2 サンプル未満しか残らなければ検出なし扱いのエラー。開始=終了もエラー', () => {
+    const fr = clean();
+    const r = buildRecordedMotion(fr, { id: 't', label: '語', trim: { start: 1, end: 1.01 } });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.errors.join()).toMatch(/有効な手/);
+    expect(buildRecordedMotion(fr, { id: 't', label: '語', trim: { start: 1, end: 1 } })).toMatchObject({ ok: false });
+  });
+  it('可動域警告: 件数と最小/最大を側・関節・軸ごとに集計する(clamp しない)', () => {
+    const mkKf = (time: number, x: number): { time: number; pose: { right: HandPose } } => ({ time, pose: { right: mk([0, 0, 0.2], [0, 0, 0], { indexMcp: x }) } });
+    const m = { schemaVersion: '0.1.0', id: 'r', category: 'sign-like-gesture', provenance: { status: 'unreviewed' }, semantic: { label: 'r' }, duration: 3, keyframes: [mkKf(0, -30), mkKf(1, 10), mkKf(2, -50), mkKf(3, -40)] } as unknown as Parameters<typeof rangeWarnings>[0];
+    const w = rangeWarnings(m, profile).filter((x) => x.joint === 'indexMcp');
+    expect(w).toHaveLength(1);
+    expect(w[0]).toMatchObject({ side: 'right', axis: 'x', count: 3, min: -50, max: -30, limit: [-20, 90] });
+  });
+});
+
+describe('語彙の最長一致の計算量', () => {
+  it('1〜2 文字の録画ラベルを重ねて追加しても、長い連続入力が線形時間で終わる', () => {
+    const { frames } = analyticFrames(1);
+    const r1 = buildRecordedMotion(frames, { id: 'rec-a', label: 'あ' });
+    const r2 = buildRecordedMotion(frames, { id: 'rec-aa', label: 'ああ' });
+    if (!r1.ok || !r2.ok) throw new Error('x');
+    const vocab = addMotionToVocabulary(addMotionToVocabulary(DEFAULT_VOCABULARY, r1.motion), r2.motion);
+    const t0 = performance.now();
+    const seq = textToSequence('あ'.repeat(40) + 'x', vocab);
+    expect(performance.now() - t0).toBeLessThan(50);
+    expect(seq.length).toBeGreaterThan(0);
+  });
+});
+
+describe('CSP(外部への接続を絞る)', () => {
+  const html = (Object.values(import.meta.glob('../index.html', { query: '?raw', import: 'default', eager: true }))[0] as string);
+  const csp = /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] ?? '';
+  const directive = (name: string): string[] => (csp.split(';').map((d) => d.trim().split(/\s+/)).find((d) => d[0] === name) ?? []).slice(1);
+  it('odml(利用統計)は許可されず、外部の許可は storage.googleapis.com(モデル取得)だけ', () => {
+    expect(csp).not.toBe('');
+    expect(csp).not.toMatch(/odml|googleapis\.com\/v1\/log|\*/);
+    const external = csp.replace(/;/g, ' ').split(/\s+/).filter((t) => /^(https?|wss?):/.test(t));
+    expect(external).toEqual(['https://storage.googleapis.com']);
+    expect(directive('connect-src')).toEqual(["'self'", 'blob:', 'data:', 'https://storage.googleapis.com']);
+    expect(directive('script-src')).toEqual(["'self'", "'unsafe-eval'", "'wasm-unsafe-eval'"]); // unsafe-eval は ajv のスキーマ検証器の生成(new Function)に必要。外部スクリプトは許可しない
+    expect(directive('default-src')).toEqual(["'self'"]);
+  });
+});
+
+describe('カメラのエラー分類(追加)', () => {
+  it('OverconstrainedError は no-device', () => {
+    expect(classifyCameraError(Object.assign(new Error('x'), { name: 'OverconstrainedError' }))).toBe('no-device');
   });
 });

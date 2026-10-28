@@ -45,7 +45,15 @@ export function textToSequence(text: string, vocab: readonly VocabEntry[] = DEFA
     unknown = '';
   };
   // 位置 j から始まる語彙が、それ自体で一致できるか(2文字以下の表記は、直後が境界のときだけ一致できる)
-  const canMatchAt = (j: number): boolean => keys.some(({ k }) => src.startsWith(k, j) && (k.length > 2 || atBoundary(j + k.length)));
+  // 位置ごとにメモ化する(1〜2 文字の表記が重なると canMatchAt と atBoundary が相互再帰して指数時間になるため)
+  const memo = new Map<number, boolean>();
+  const canMatchAt = (j: number): boolean => {
+    const hit = memo.get(j);
+    if (hit !== undefined) return hit;
+    const r = keys.some(({ k }) => src.startsWith(k, j) && (k.length > 2 || atBoundary(j + k.length)));
+    memo.set(j, r);
+    return r;
+  };
   // 境界: 文末・区切り・装飾(TAIL)・一致できる別の語彙の開始(「すきやき」の「すき」は境界がなく一致しない)
   const atBoundary = (j: number): boolean => j >= src.length || DELIMITER.test(src[j]) || TAIL.test(src[j]) || canMatchAt(j);
   let i = 0;

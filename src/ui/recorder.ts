@@ -58,6 +58,7 @@ export function createRecorder(host: RecorderHost, loadDetector: () => Promise<H
   const clearError = (): void => { el.errors.hidden = true; el.errors.textContent = ''; };
 
   function teardown(): void {
+    gen++;
     cancelAnimationFrame(raf);
     recording = false;
     stopCamera(stream);
@@ -74,38 +75,58 @@ export function createRecorder(host: RecorderHost, loadDetector: () => Promise<H
     el.detect.textContent = '';
   }
 
+  /** startCamera の世代。teardown(止める/失敗)で進め、await から戻ったときに自分の世代でなければ結果を捨てる */
+  let gen = 0;
+
   async function startCamera(): Promise<void> {
     clearError();
     el.camera.disabled = true;
     setStatus(REC_STATUS.loading);
+    const my = ++gen;
+    let s: MediaStream;
     try {
-      stream = await openCamera();
+      s = await openCamera();
     } catch (e) {
+      if (my !== gen) return;
       teardown();
       setStatus(REC_STATUS.idle);
       showError(classifyCameraError(e), e instanceof Error ? e.message : undefined);
       return;
     }
-    el.video.srcObject = stream;
+    if (my !== gen) {
+      stopCamera(s);
+      return;
+    }
+    stream = s;
+    el.video.srcObject = s;
     el.video.hidden = false;
+    // モデル取得が遅くても、カメラ(ランプ)を止められるように、止めるボタンを先に出す
+    el.camera.hidden = true;
+    el.cameraStop.hidden = false;
     try {
       await el.video.play();
     } catch (e) {
+      if (my !== gen) return;
       teardown();
       setStatus(REC_STATUS.idle);
       showError(classifyCameraError(e), e instanceof Error ? e.message : undefined);
       return;
     }
+    let d: HandDetector;
     try {
-      detector = await loadDetector();
+      d = await loadDetector();
     } catch (e) {
+      if (my !== gen) return;
       teardown();
       setStatus(REC_STATUS.idle);
       showError(classifyModelError(e), e instanceof Error ? e.message : undefined);
       return;
     }
-    el.camera.hidden = true;
-    el.cameraStop.hidden = false;
+    if (my !== gen) {
+      d.close(); // 待っている間に止められた: 届いた detector は捨てる
+      return;
+    }
+    detector = d;
     el.start.disabled = false;
     setStatus(REC_STATUS.ready);
     loop();
@@ -191,7 +212,7 @@ export function createRecorder(host: RecorderHost, loadDetector: () => Promise<H
       id: recId,
       label: label || '(未入力)',
       settings: { ...DEFAULT_SETTINGS, aspect, armLength: Number.isFinite(arm) && arm > 0 ? arm : DEFAULT_SETTINGS.armLength },
-      trim: end > start ? { start, end } : undefined,
+      trim: { start, end }, // end <= start もそのまま渡し、「終了は開始より後」のエラーを出す
       profile: host.profile,
     });
     el.problems.hidden = r.ok;
