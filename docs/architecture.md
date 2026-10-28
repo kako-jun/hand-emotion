@@ -8,7 +8,7 @@
 
 - **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）、YAML は **yaml**。UI フレームワークは未採用（素の DOM）。
 - 独自の手話辞書・アバター資産を抱え込まず、**アバター非依存の中間表現（motion JSON）と avatar profile を介したマッピング**を中心にする。
-- VRM 1.0 は `@pixiv/three-vrm` で読み込む（Phase 4a）。将来: HamNoSys / SiGML import、MediaPipe Hands、VRM 以外の glTF humanoid rig への retarget。
+- VRM 1.0 は `@pixiv/three-vrm` で読み込む（Phase 4a）。手の録画は `@mediapipe/tasks-vision`（Apache-2.0、Phase 4b）。将来: HamNoSys / SiGML import、VRM 以外の glTF humanoid rig への retarget。
 
 ## レイヤ分離
 
@@ -33,7 +33,7 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 
 両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。実装は Phase 3 の `src/export/`: 共通の brief model（`buildBrief`）を作り、そこから runtime JSON / YAML / Markdown を生成する（Three.js・DOM 非依存の純粋関数。UI は表示・コピー・Blob ダウンロードだけ）。仕様は `docs/spec.md`「出力層」。
 
-## コード構成（Phase 0〜4a）
+## コード構成（Phase 0〜4b）
 
 ```
 schema/motion.schema.json          # motion の JSON Schema（正本）
@@ -61,6 +61,11 @@ src/avatar/vrmPose.ts              # retarget の出力 -> VRM ボーンのロ�
 src/preview/vrmAvatar.ts           # three-vrm で .vrm を読み、vrmPose の結果を normalized humanoid へ書くだけ(動的 import で遅延ロード)
 scripts/make-fixture-vrm.mjs       # テスト用 VRM 1.0(棒人間)の生成(--check で書き出し済みと一致検査)。fixtures/ に全指あり・指なしの 2 本
 tests/vrm.test.ts, tests/vrm-fixture.ts # profile 生成・euler/鏡像規約・IK 到達・手のひら向き・指なし・エラー系(フィクスチャを Object3D 階層にして world 座標で検証)
+src/capture/{types,math,hand,series,motion,errors}.ts # 録画の純粋関数(Three.js・MediaPipe・DOM 非依存)。hand: 21 ランドマーク -> HandPose(左右・位置・手首 euler・指の屈曲・腕長スケール)、series: 外れ値・欠落補間・平滑・間引き、motion: フレーム列 -> MotionDefinition(unreviewed 固定)と可動域警告、errors: カメラ/モデルのエラー分類
+src/capture/{camera,mediapipe}.ts  # 薄いアダプタ(getUserMedia / HandLandmarker)。ランドマークの意味づけはここに置かない。mediapipe は動的 import
+src/ui/recorder.ts                 # 「録画」セクションの DOM コントローラ。純粋関数とアダプタを呼んで表示するだけ
+tests/capture.test.ts, tests/capture-synth.ts # 純粋関数の単体テスト。synth は姿勢 -> 合成ランドマーク(順運動学)で往復一致を見る
+vite.config.ts                     # vitest 設定 + mediapipe-wasm プラグイン(wasm を /mediapipe-wasm/ で配信・ビルド出力へ複製)
 src/main.ts                        # DOM UI(貼り付け/ファイル入力・形式/モード切替・再生/シーク・現在キューのハイライト・エラー表示・VRM 選択)とプレビュー(リターゲット時のみ2骨格を並置)
 tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
 tests/typed-samples.ts             # 型付き(as const satisfies)フィクスチャ: サンプル相当 + reviewed/arm/hold/全 ease/jsl 入り
@@ -77,10 +82,19 @@ tests/types.test.ts                # フィクスチャ==サンプル JSON、フ
 - 関節回転は euler 角（度）`[x,y,z]`。関節キーは手ごとに 15 個（親指 CMC/MCP/IP、他4指 MCP/PIP/DIP）+ 手首。
 - avatar profile の `capability` が `full` なら全指ボーン必須、`gesture-only` なら指ボーン無しで通る（フォールバック）。VRM humanoid 対応は `bones` に VRM ボーン名（例: `leftIndexProximal`）を入れる。
 
+## 録画の依存と配信（Phase 4b）
+
+- **wasm は自サイトで配る（node_modules から複製）**。`@mediapipe/tasks-vision` の `exports` が `wasm/` を公開していないため `?url` import が使えない。そこで `vite.config.ts` の小さなプラグインが、開発サーバーでは `/mediapipe-wasm/*` を `node_modules` から配信し、ビルドでは `dist/mediapipe-wasm/` へ出力する（SIMD 版と非 SIMD 版のみ。`_module_` 版は使わないので複製しない）。CDN にしなかった理由は、実行時に外部へ取りに行くものを手の検出モデル 1 つだけにして、wasm の版ずれ（パッケージ版と CDN 版）と第三者 CDN への依存を避けるため。代償は `dist` に wasm 約 28MB が増えること。
+- **モデル `hand_landmarker.task` はバンドルしない**。公式 URL から実行時に取得し、失敗はエラー表示（`classifyModelError`）。
+- `@mediapipe/tasks-vision` は `createHandDetector` の中で動的 import（録画を開始するまで読まない）。
+- 録画 → motion の純粋関数は MediaPipe の型に依存しない（`DetectedHand` / `CaptureFrame` をアダプタが詰め替える）。UI が持つのは「フレームを溜める・スライダー値を渡す・結果を表示する」だけで、左右・座標・間引きの判断は `src/capture/` に閉じる。
+
 ## 未確定事項
 
 - UI 層（フレームワーク）の選定。バンドラは Vite に確定。
 - 回転表現を euler から quaternion へ変えるか（retarget 実装時に判断。変更するなら schemaVersion を上げる）。
 - 型とスキーマの二重管理を、スキーマからの型生成へ置き換えるか。
 - 顔（表情・視線）の motion 表現（avatar profile は `bones.face` の受け口のみ。motion 側は未定義）。
-- HamNoSys / SiGML import・MediaPipe Hands 連携の実装方式（将来 phase）。
+- HamNoSys / SiGML import の実装方式（将来 phase）。
+- 録画の胸中央原点・奥行きは弱透視の既定値（カメラ画角 60°・胸中央を画像 (0.5,0.8)・距離 0.7m）。キャリブレーション UI は未実装。
+- 録画 motion の腕（肩/肘）は取らない（手首位置 + IK で再現）。顔・体も未対応。

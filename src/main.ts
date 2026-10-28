@@ -5,6 +5,10 @@ import gestureProfileJson from '../samples/gesture-only.avatar-profile.json';
 import { validateAvatarProfile } from './validate';
 import { sampleCueTimeline } from './motion/cueTimeline';
 import { planFromText } from './modes';
+import { DEFAULT_VOCABULARY, addMotionToVocabulary } from './text/vocabulary';
+import type { VocabEntry } from './text/vocabulary';
+import { samplePose } from './motion/interpolate';
+import { createRecorder } from './ui/recorder';
 import type { Mode, ModeKind, Plan } from './modes';
 import { formatIssue } from './import/cues';
 import type { CueFormat } from './import/cues';
@@ -14,7 +18,7 @@ import { HandRigPair } from './preview/handModel';
 import type { VrmAvatar } from './preview/vrmAvatar';
 import { EXPORT_LABELS, FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption, vrmApplyNotes } from './ui/labels';
 import type { ExportKind } from './ui/labels';
-import type { AvatarProfile, Side } from './types/definition';
+import type { AvatarProfile, MotionDefinition, Side } from './types/definition';
 
 function profile(json: unknown): AvatarProfile {
   const r = validateAvatarProfile(json);
@@ -116,6 +120,10 @@ function resize(): void {
 addEventListener('resize', resize);
 
 // --- 再生状態(可変) ---
+/** 実行時の語彙(同梱 + 録画で追加した語。保存しない) */
+let vocab: readonly VocabEntry[] = DEFAULT_VOCABULARY;
+/** 録画 motion の再生確認中(あれば字幕タイムラインの代わりにこの motion の姿勢を流す) */
+let audition: { motion: MotionDefinition; time: number; onEnd?: () => void } | null = null;
 let plan: Plan | null = null;
 let time = 0;
 let playing = false;
@@ -148,7 +156,7 @@ function renderCueList(): void {
 }
 function replan(): void {
   const mode = currentMode();
-  plan = textEl.value.trim() === '' ? null : planFromText(textEl.value, formatSel.value as CueFormat | 'auto', mode);
+  plan = textEl.value.trim() === '' ? null : planFromText(textEl.value, formatSel.value as CueFormat | 'auto', mode, vocab);
   const errBox = $('errors');
   errBox.hidden = !(plan && !plan.ok);
   errBox.textContent = plan && !plan.ok ? plan.errors.map(formatIssue).join('\n') : '';
@@ -312,8 +320,18 @@ function frame(dt: number): void {
   }
   const tl = plan && plan.ok ? plan.timeline : EMPTY_TL;
   const s = sampleCueTimeline(tl, time);
-  const a = retargetPose(debugPose ?? s.pose, avatar ? avatar.profile : rigA.profile);
-  const b = retargetPose(s.pose, rigB.profile);
+  let shown = s.pose;
+  if (audition) {
+    audition.time += dt;
+    shown = samplePose(audition.motion, audition.time);
+    if (audition.time >= audition.motion.duration + 0.3) {
+      const done = audition.onEnd;
+      audition = null;
+      done?.();
+    }
+  }
+  const a = retargetPose(debugPose ?? shown, avatar ? avatar.profile : rigA.profile);
+  const b = retargetPose(shown, rigB.profile);
   if (avatar) lastApply = avatar.apply(a, dt);
   else rigA.apply(a);
   if (rigB.group.visible) rigB.apply(b);
@@ -323,7 +341,7 @@ function frame(dt: number): void {
   const seg = tl.segments[s.cueIndex];
   const gesture = seg?.gestures && s.gestureIndex >= 0 ? seg.gestures.segments[s.gestureIndex] : undefined;
   lastGesture = gesture?.motion ? `${gesture.token}  [${provenanceBadge(gesture.motion)}]` : '';
-  const caption = seg ? (seg.cue.text.replace(/\n/g, ' / ') + (lastGesture ? `    ${lastGesture}` : '')) : '';
+  const caption = audition ? `${audition.motion.semantic.label}    [${provenanceBadge(audition.motion)}]` : seg ? (seg.cue.text.replace(/\n/g, ' / ') + (lastGesture ? `    ${lastGesture}` : '')) : '';
   if (caption !== lastCaption) {
     $('caption').textContent = caption;
     lastCaption = caption;
@@ -343,6 +361,15 @@ function frame(dt: number): void {
   $('time').textContent = `${time.toFixed(2)} / ${tl.total.toFixed(2)} s`;
   renderer.render(scene, camera);
 }
+const recorder = createRecorder(
+  {
+    profile: PROFILES.vrm,
+    setAudition: (motion, onEnd) => { audition = motion ? { motion, time: 0, onEnd } : null; },
+    addVocab: (motion) => { vocab = addMotionToVocabulary(vocab, motion); replan(); },
+    removeVocab: (id) => { vocab = vocab.filter((e) => e.motion.id !== id); replan(); },
+  },
+  async () => (await import('./capture/mediapipe')).createHandDetector(),
+);
 replan();
 resize();
 let prev = performance.now();
@@ -380,5 +407,8 @@ if (import.meta.env.DEV) {
     setDebugPose: (p: typeof debugPose) => { debugPose = p; },
     seekTo: (t: number) => { time = t; setPlaying(false); },
     play: () => setPlaying(true),
+    recorder,
+    vocabIds: () => vocab.map((e) => e.motion.id),
+    auditioning: () => audition !== null,
   };
 }
