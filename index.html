@@ -27,6 +27,8 @@
       canvas{display:block;width:100%;height:100%}
       .rig-label{position:absolute;top:8px;font-size:12px;color:#aab;transform:translateX(-50%)}
       #note{font-size:12px;color:#99a}
+      #export{border-top:1px solid #333;padding-top:6px}
+      #exportOut{margin:0;max-height:160px;overflow:auto;padding:6px;background:#15151b;border:1px solid #333;border-radius:4px;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
       [hidden],.row[hidden]{display:none}
     </style>
   </head>
@@ -57,6 +59,17 @@
         <ol id="cues"></ol>
         <div id="caption"></div>
         <div id="notes"></div>
+        <details id="export">
+          <summary>出力(runtime JSON / retarget 指示書)</summary>
+          <div class="row">
+            <label>形式 <select id="exportKind"></select></label>
+            <label>骨格 <select id="exportProfile"></select></label>
+            <button id="exportCopy" type="button">コピー</button>
+            <button id="exportDownload" type="button">ダウンロード</button>
+            <span id="exportStatus"></span>
+          </div>
+          <pre id="exportOut"></pre>
+        </details>
       </div>
       <div id="stage"><span class="rig-label" id="labelA"></span><span class="rig-label" id="labelB"></span></div>
     </div>

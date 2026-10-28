@@ -6,7 +6,7 @@
 
 ## スタック
 
-- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）。UI フレームワークは未採用（素の DOM）。
+- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）、YAML は **yaml**。UI フレームワークは未採用（素の DOM）。
 - 独自の手話辞書・アバター資産を抱え込まず、**アバター非依存の中間表現（motion JSON）と avatar profile を介したマッピング**を中心にする。
 - 将来: HamNoSys / SiGML import、MediaPipe Hands、VRM / glTF humanoid rig への retarget。
 
@@ -31,9 +31,9 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 - **機械可読 JSON**: runtime が直接読む motion データ。
 - **人間/エージェント可読 YAML/Markdown**: エージェントへの retarget 指示書（必須/任意ボーン・フォールバック・優先順位）。
 
-両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。
+両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。実装は Phase 3 の `src/export/`: 共通の brief model（`buildBrief`）を作り、そこから runtime JSON / YAML / Markdown を生成する（Three.js・DOM 非依存の純粋関数。UI は表示・コピー・Blob ダウンロードだけ）。仕様は `docs/spec.md`「出力層」。
 
-## コード構成（Phase 0 + Phase 1 + Phase 2）
+## コード構成（Phase 0〜3）
 
 ```
 schema/motion.schema.json          # motion の JSON Schema（正本）
@@ -52,7 +52,8 @@ src/import/cues.ts                 # SRT/VTT/LRC/プレーン → Cue{start,end,
 src/motion/cueTimeline.ts          # キュー列 + 語彙変換 → 字幕時刻に同期するタイムライン(速度上限・省略・待機。純粋関数)
 src/modes/index.ts                 # Mode(判別可能 union: caption-wipe / fingerspelling-wipe / avatar-retarget)・テキスト → 再生計画 planFromText(純粋関数)
 presets/kana-*.motion.json         # かな指文字の最小セット(あいうえお。unreviewed)。src/text/presets.ts の FINGERSPELLING_MOTIONS
-src/ui/labels.ts                   # UI 文言(モード名/説明・形式名・未監修バッジ)
+src/export/{brief,runtime,yaml,markdown,index}.ts # 出力層。brief model(buildBrief)→ runtime JSON / YAML(yaml パッケージ) / Markdown。往復検証用 validateRuntimeMotion
+src/ui/labels.ts                   # UI 文言(モード名/説明・形式名・出力形式名・未監修バッジ)
 src/preview/handModel.ts           # Three.js 簡易手モデル。retarget 結果(ボーン名→回転)を適用するだけ
 src/main.ts                        # DOM UI(貼り付け/ファイル入力・形式/モード切替・再生/シーク・現在キューのハイライト・エラー表示)とプレビュー(リターゲット時のみ2骨格を並置)
 tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
@@ -62,6 +63,7 @@ tests/retarget.test.ts             # 鏡像・可動域・gesture-only・初期�
 tests/vocabulary.test.ts           # プリセット・語彙変換・タイムライン・UI 文言(禁止語走査)
 tests/cues.test.ts                 # 各パーサの正常/異常/境界(BOM・CRLF・LRC offset/複数時刻・VTT NOTE/設定・不正時刻の行番号)
 tests/cueTimeline.test.ts          # キュー接続(速度上限・省略・待機・同期)・指文字・モード判別・planFromText
+tests/export.test.ts               # brief model 各要素・3出力の同一源泉(往復)・runtime JSON 検証・未監修/禁止語走査
 tests/types.test.ts                # フィクスチャ==サンプル JSON、フィクスチャがスキーマを通ることの確認
 ```
 

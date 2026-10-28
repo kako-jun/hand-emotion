@@ -34,3 +34,10 @@ export const FORMAT_LABELS: Readonly<Record<CueFormat | 'auto', string>> = {
 
 export const omittedCaption = (tokens: readonly string[]): string => `速度上限のため身振りを省略(字幕のみ): ${tokens.join(' ')}`;
 export const unsupportedCaption = (tokens: readonly string[]): string => `未対応語(字幕のみ): ${tokens.join(' ')}`;
+
+export type ExportKind = 'runtime-json' | 'brief-yaml' | 'brief-markdown';
+export const EXPORT_LABELS: Readonly<Record<ExportKind, Readonly<{ name: string; file: string; mime: string }>>> = {
+  'runtime-json': { name: 'runtime JSON', file: 'hand-emotion.runtime.json', mime: 'application/json' },
+  'brief-yaml': { name: 'retarget 指示書(YAML)', file: 'hand-emotion.retarget-brief.yaml', mime: 'text/yaml' },
+  'brief-markdown': { name: '指示書(Markdown)', file: 'hand-emotion.retarget-brief.md', mime: 'text/markdown' },
+};
