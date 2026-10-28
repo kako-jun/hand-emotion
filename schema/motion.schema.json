@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hand-emotion.llll-ll.com/schema/motion.schema.json",
+  "title": "hand-emotion motion (avatar-independent intermediate representation)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "category",
+    "provenance",
+    "semantic",
+    "duration",
+    "keyframes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "0.1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "category": {
+      "enum": [
+        "jsl",
+        "kana-fingerspelling",
+        "sign-like-gesture"
+      ],
+      "description": "language class: JSL / kana fingerspelling / sign-like gesture. Never merge them."
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "unreviewed",
+            "reviewed"
+          ]
+        },
+        "reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "reviewed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "reviewer",
+              "reviewedAt"
+            ]
+          }
+        }
+      ]
+    },
+    "semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reading": {
+          "type": "string"
+        },
+        "gloss": {
+          "type": "string"
+        },
+        "lang": {
+          "type": "string"
+        }
+      }
+    },
+    "duration": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "seconds"
+    },
+    "keyframes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/keyframe"
+      }
+    }
+  },
+  "$defs": {
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -360,
+        "maximum": 360
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "euler XYZ intrinsic, degrees (see docs/spec.md)"
+    },
+    "ease": {
+      "enum": [
+        "linear",
+        "ease-in",
+        "ease-out",
+        "ease-in-out"
+      ]
+    },
+    "keyframe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time",
+        "pose"
+      ],
+      "properties": {
+        "time": {
+          "type": "number",
+          "minimum": 0,
+          "description": "seconds from motion start"
+        },
+        "ease": {
+          "$ref": "#/$defs/ease"
+        },
+        "hold": {
+          "type": "number",
+          "minimum": 0,
+          "description": "seconds to hold this pose"
+        },
+        "pose": {
+          "$ref": "#/$defs/pose"
+        }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "left": {
+          "$ref": "#/$defs/handPose"
+        },
+        "right": {
+          "$ref": "#/$defs/handPose"
+        }
+      }
+    },
+    "handPose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wrist",
+        "joints"
+      ],
+      "properties": {
+        "wrist": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "position",
+            "rotation"
+          ],
+          "properties": {
+            "position": {
+              "$ref": "#/$defs/position"
+            },
+            "rotation": {
+              "$ref": "#/$defs/vec3"
+            }
+          }
+        },
+        "joints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "thumbCmc",
+            "thumbMcp",
+            "thumbIp",
+            "indexMcp",
+            "indexPip",
+            "indexDip",
+            "middleMcp",
+            "middlePip",
+            "middleDip",
+            "ringMcp",
+            "ringPip",
+            "ringDip",
+            "littleMcp",
+            "littlePip",
+            "littleDip"
+          ],
+          "properties": {
+            "thumbCmc": {
+              "$ref": "#/$defs/vec3"
+            },
+            "thumbMcp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "thumbIp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "indexMcp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "indexPip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "indexDip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "middleMcp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "middlePip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "middleDip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "ringMcp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "ringPip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "ringDip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "littleMcp": {
+              "$ref": "#/$defs/vec3"
+            },
+            "littlePip": {
+              "$ref": "#/$defs/vec3"
+            },
+            "littleDip": {
+              "$ref": "#/$defs/vec3"
+            }
+          }
+        },
+        "arm": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "shoulder": {
+              "$ref": "#/$defs/vec3"
+            },
+            "elbow": {
+              "$ref": "#/$defs/vec3"
+            }
+          }
+        }
+      }
+    },
+    "position": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -10,
+        "maximum": 10
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "meters; origin = signer chest center (sternum), +x = signer right, +y up, +z forward. Left hand uses the right-hand mirror convention (see docs/spec.md)"
+    }
+  }
+}

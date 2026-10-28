@@ -6,7 +6,7 @@
 
 ## スタック
 
-- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。アプリケーションフレームワーク（バンドラ/UI層）は未確定。
+- **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）。UI フレームワークは未採用（デモ/プレイグラウンドUI 着手時に決める）。
 - 独自の手話辞書・アバター資産を抱え込まず、**アバター非依存の中間表現（motion JSON）と avatar profile を介したマッピング**を中心にする。
 - 将来: HamNoSys / SiGML import、MediaPipe Hands、VRM / glTF humanoid rig への retarget。
 
@@ -32,9 +32,29 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 
 両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。
 
+## コード構成（Phase 0）
+
+```
+schema/motion.schema.json          # motion の JSON Schema（正本）
+schema/avatar-profile.schema.json  # avatar profile の JSON Schema（正本）
+samples/                           # 検証を通るサンプル（motion / VRM 用 profile）
+src/types/definition.ts            # 不変の定義型（readonly）。MotionDefinition / AvatarProfile
+src/types/playback.ts              # 可変の再生状態型。定義への参照のみ持ち、書き戻さない
+src/validate/index.ts              # ajv(+ajv-formats) 検証 + スキーマで書けない整合性（timing 昇順・可動域 min<=max）
+src/main.ts                        # Three.js 両手プレースホルダ表示（Phase 1 で置換）
+tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
+tests/typed-samples.ts             # 型付き(as const satisfies)フィクスチャ: サンプル相当 + reviewed/arm/hold/全 ease/jsl 入り
+tests/types.test.ts                # フィクスチャ==サンプル JSON、フィクスチャがスキーマを通ることの確認
+```
+
+- 型とスキーマは手書きで二重管理している（スキーマが正本）。ずれの検知は `tests/typed-samples.ts` の型付きフィクスチャ（`as const satisfies`）が前提で、`npm run build` の tsc が型との不一致を、`tests/types.test.ts` がスキーマ検証と JSON サンプルとの一致を見る。**限界: フィクスチャに現れないフィールドの型/スキーマのずれは検知できない**（vitest 単体は型を検査しない。tsc が必要）。生成化は将来検討。
+- 関節回転は euler 角（度）`[x,y,z]`。関節キーは手ごとに 15 個（親指 CMC/MCP/IP、他4指 MCP/PIP/DIP）+ 手首。
+- avatar profile の `capability` が `full` なら全指ボーン必須、`gesture-only` なら指ボーン無しで通る（フォールバック）。VRM humanoid 対応は `bones` に VRM ボーン名（例: `leftIndexProximal`）を入れる。
+
 ## 未確定事項
 
-- アプリケーションフレームワーク（バンドラ・UI層）の選定。
-- 中間表現 motion JSON の正式スキーマ（MVP のプリセット定義を通してから確定する）。
-- avatar profile のスキーマ（VRM/glTF humanoid の標準ボーン名との対応表を含む）。
+- UI 層（フレームワーク）の選定。バンドラは Vite に確定。
+- 回転表現を euler から quaternion へ変えるか（retarget 実装時に判断。変更するなら schemaVersion を上げる）。
+- 型とスキーマの二重管理を、スキーマからの型生成へ置き換えるか。
+- 顔（表情・視線）の motion 表現（avatar profile は `bones.face` の受け口のみ。motion 側は未定義）。
 - HamNoSys / SiGML import・MediaPipe Hands 連携の実装方式（将来 phase）。

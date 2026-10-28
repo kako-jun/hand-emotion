@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hand-emotion.llll-ll.com/schema/avatar-profile.schema.json",
+  "title": "hand-emotion avatar profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "rig",
+    "capability",
+    "bones",
+    "rangeOfMotion"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "0.1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "rig": {
+      "enum": [
+        "vrm-humanoid",
+        "gltf-humanoid",
+        "custom"
+      ]
+    },
+    "capability": {
+      "enum": [
+        "full",
+        "gesture-only"
+      ],
+      "description": "gesture-only: finger bones missing, wrist/arm gestures only"
+    },
+    "bones": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "left",
+        "right"
+      ],
+      "properties": {
+        "left": {
+          "$ref": "#/$defs/side"
+        },
+        "right": {
+          "$ref": "#/$defs/side"
+        },
+        "face": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "rangeOfMotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "per-joint [min,max] degrees per axis",
+      "properties": {
+        "thumbCmc": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "thumbMcp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "thumbIp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "indexMcp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "indexPip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "indexDip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "middleMcp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "middlePip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "middleDip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "ringMcp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "ringPip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "ringDip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "littleMcp": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "littlePip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "littleDip": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "wrist": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "shoulder": {
+          "$ref": "#/$defs/axisRange"
+        },
+        "elbow": {
+          "$ref": "#/$defs/axisRange"
+        }
+      }
+    },
+    "restPoseCorrection": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/vec3"
+      },
+      "description": "bone name -> euler offset (deg) applied to rest pose"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capability": {
+            "const": "full"
+          }
+        },
+        "required": [
+          "capability"
+        ]
+      },
+      "then": {
+        "properties": {
+          "bones": {
+            "properties": {
+              "left": {
+                "required": [
+                  "fingers"
+                ],
+                "properties": {
+                  "fingers": {
+                    "required": [
+                      "thumbCmc",
+                      "thumbMcp",
+                      "thumbIp",
+                      "indexMcp",
+                      "indexPip",
+                      "indexDip",
+                      "middleMcp",
+                      "middlePip",
+                      "middleDip",
+                      "ringMcp",
+                      "ringPip",
+                      "ringDip",
+                      "littleMcp",
+                      "littlePip",
+                      "littleDip"
+                    ]
+                  }
+                }
+              },
+              "right": {
+                "required": [
+                  "fingers"
+                ],
+                "properties": {
+                  "fingers": {
+                    "required": [
+                      "thumbCmc",
+                      "thumbMcp",
+                      "thumbIp",
+                      "indexMcp",
+                      "indexPip",
+                      "indexDip",
+                      "middleMcp",
+                      "middlePip",
+                      "middleDip",
+                      "ringMcp",
+                      "ringPip",
+                      "ringDip",
+                      "littleMcp",
+                      "littlePip",
+                      "littleDip"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "side": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wrist"
+      ],
+      "properties": {
+        "wrist": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shoulder": {
+          "type": "string"
+        },
+        "elbow": {
+          "type": "string"
+        },
+        "fingers": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "thumbCmc": {
+              "type": "string",
+              "minLength": 1
+            },
+            "thumbMcp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "thumbIp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "indexMcp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "indexPip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "indexDip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "middleMcp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "middlePip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "middleDip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ringMcp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ringPip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ringDip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "littleMcp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "littlePip": {
+              "type": "string",
+              "minLength": 1
+            },
+            "littleDip": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -360,
+        "maximum": 360
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "axisRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "y": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "z": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    }
+  }
+}
