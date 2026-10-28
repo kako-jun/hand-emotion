@@ -30,6 +30,7 @@
 - 手の検出は [MediaPipe Hands / Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker)（`@mediapipe/tasks-vision`、Apache-2.0、Google）。
 - 手の検出モデル `hand_landmarker.task` はこのリポジトリに含めない。実行時に MediaPipe 公式の配布 URL `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task` から取得する（モデルの条件は MediaPipe のモデルカードに従う）。オフラインでは録画できない。
 - wasm（`@mediapipe/tasks-vision` 同梱）は自サイトの `/mediapipe-wasm/` から配信する。
+- `@mediapipe/tasks-vision` は利用統計（映像は含まない）を Google へ送る実装だが、`index.html` の CSP（`connect-src`）で遮断している。外部への接続はモデルの取得先（storage.googleapis.com）だけ。
 
 ## コマンド
 

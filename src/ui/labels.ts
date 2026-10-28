@@ -58,7 +58,7 @@ export function vrmApplyNotes(r: Readonly<{ unreachable: readonly ('left' | 'rig
 
 export const REC_TITLE = '録画(自分の手を動きにする)';
 export const REC_NOTICE = '映像はこのブラウザ内だけで処理し、保存も送信もしません(記録するのは手のランドマークの数値だけです)。録画した動きは未監修の手話風身振りとして扱います。';
-export const REC_MODEL_NOTE = '初回は手の検出モデル(MediaPipe Hand Landmarker)を Google の配布 URL から取得します。';
+export const REC_MODEL_NOTE = '初回は手の検出モデル(MediaPipe Hand Landmarker)を Google の配布 URL から取得します。ライブラリの利用統計の送信はブラウザの CSP で遮断しています(映像は送られません)。';
 export const REC_VOCAB_NOTE = '語彙への追加はこのページを開いている間だけ有効です(自動保存しません)。残したいときは JSON をダウンロードしてください。';
 
 export const CAPTURE_ERROR_LABELS: Readonly<Record<CaptureErrorKind, string>> = {

@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- MediaPipe ライブラリは利用統計を odml.pa.googleapis.com へ送るため、外部への接続はモデルの取得先だけに限る(映像は元々送られない)。dev のときだけ vite.config.ts が HMR 用の ws を足す -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' blob: data: https://storage.googleapis.com; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>hand-emotion</title>
     <style>
       html,body{margin:0;height:100%;background:#1a1a22;color:#e8e8f0;font:14px/1.5 system-ui,sans-serif}

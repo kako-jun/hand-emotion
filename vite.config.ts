@@ -4,7 +4,7 @@ import type { Plugin } from 'vite';
 
 /** MediaPipe の wasm(@mediapipe/tasks-vision/wasm)を /mediapipe-wasm/ で配る。
  *  パッケージの exports が wasm ディレクトリを公開していないので、?url import ではなくここで開発サーバー配信とビルド出力へ載せる。
- *  CDN に依存せず、実行時に外部へ取りに行くのはモデルファイル(hand_landmarker.task)だけにするため。 */
+ *  CDN に依存しない(外部へ取りに行くのはモデルファイルだけ。ライブラリの利用統計送信は index.html の CSP で遮断)。 */
 function mediapipeWasm(): Plugin {
   const dir = new URL('./node_modules/@mediapipe/tasks-vision/wasm/', import.meta.url);
   const BASE = '/mediapipe-wasm/';
@@ -34,7 +34,20 @@ function mediapipeWasm(): Plugin {
   };
 }
 
+/** 開発サーバーのときだけ、HMR の WebSocket を CSP の connect-src に足す(ビルドは index.html のまま厳格) */
+function devCsp(): Plugin {
+  return {
+    name: 'dev-csp',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        return ctx.server ? html.replace("connect-src 'self'", "connect-src 'self' ws://localhost:* ws://127.0.0.1:*") : html;
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [mediapipeWasm()],
+  plugins: [mediapipeWasm(), devCsp()],
   test: { include: ['tests/**/*.test.ts'] },
 });
