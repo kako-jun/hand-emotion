@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- MediaPipe ライブラリは利用統計を odml.pa.googleapis.com へ送るため、外部への接続はモデルの取得先だけに限る(映像は元々送られない)。dev のときだけ vite.config.ts が HMR 用の ws を足す -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self' blob: data: https://storage.googleapis.com; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>hand-emotion</title>
     <style>
       html,body{margin:0;height:100%;background:#1a1a22;color:#e8e8f0;font:14px/1.5 system-ui,sans-serif}
@@ -31,7 +33,17 @@
       #exportOut{margin:0;max-height:160px;overflow:auto;padding:6px;background:#15151b;border:1px solid #333;border-radius:4px;font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap}
       #vrmErrors{background:#4a1c1c;color:#ffb4b4;padding:6px 10px;border-radius:4px;font-size:12px;white-space:pre-wrap}
       #vrmStatus{font-size:12px;color:#9c9}
-      [hidden],.row[hidden]{display:none}
+      #rec{border-top:1px solid #333;padding-top:6px}
+      #recVideo{width:240px;max-width:100%;border-radius:4px;background:#000;transform:scaleX(-1)}
+      #recDetect{font-size:12px;color:#9c9}
+      #recDetect.none{color:#d8c27a}
+      #recErrors,#recProblems{background:#4a1c1c;color:#ffb4b4;padding:6px 10px;border-radius:4px;font-size:12px;white-space:pre-wrap}
+      #recWarn{font-size:12px;color:#d8c27a;white-space:pre-wrap}
+      #recNotice{font-size:12px;color:#99a}
+      #recLabel{width:10em;padding:4px;background:#15151b;color:inherit;border:1px solid #444;border-radius:4px}
+      #recArm{width:5em;padding:4px;background:#15151b;color:inherit;border:1px solid #444;border-radius:4px}
+      button:disabled{opacity:.45;cursor:default}
+      [hidden],.row[hidden],#recEdit[hidden],#recVideo[hidden]{display:none}
     </style>
   </head>
   <body>
@@ -57,6 +69,41 @@
         </div>
         <div id="vrmErrors" role="alert" hidden></div>
         <div id="errors" role="alert" hidden></div>
+        <details id="rec">
+          <summary id="recTitle"></summary>
+          <div id="recNotice"></div>
+          <div class="row">
+            <button id="recCamera" type="button">カメラを開始</button>
+            <button id="recCameraStop" type="button" hidden>カメラを止める</button>
+            <button id="recStart" type="button" disabled>録画</button>
+            <button id="recStop" type="button" disabled>録画を止める</button>
+            <span id="recStatus"></span>
+            <span id="recBadge" style="background:#5a3b00;color:#ffd48a;padding:2px 8px;border-radius:10px;font-size:12px"></span>
+          </div>
+          <div class="row">
+            <video id="recVideo" muted playsinline hidden></video>
+            <span id="recDetect"></span>
+          </div>
+          <div id="recErrors" role="alert" hidden></div>
+          <div id="recEdit" hidden>
+            <div class="row">
+              <label>開始 <input id="recTrimStart" type="range" min="0" max="1000" value="0" /></label>
+              <label>終了 <input id="recTrimEnd" type="range" min="0" max="1000" value="1000" /></label>
+              <span id="recTrimText"></span>
+            </div>
+            <div class="row">
+              <label>ラベル(語) <input id="recLabel" type="text" maxlength="40" placeholder="例: やっほー" /></label>
+              <label>腕の長さ(m) <input id="recArm" type="number" min="0.3" max="1.2" step="0.01" value="0.6" /></label>
+              <button id="recAudition" type="button">再生確認</button>
+              <button id="recAdd" type="button">語彙に追加</button>
+              <button id="recDownload" type="button">JSON をダウンロード</button>
+            </div>
+            <div id="recProblems" role="alert" hidden></div>
+            <div id="recInfo"></div>
+            <div id="recWarn"></div>
+            <div id="recVocab"></div>
+          </div>
+        </details>
         <div class="row">
           <label>モード <select id="modeSel"></select></label>
           <label id="rigBRow" hidden>右の骨格 <select id="rigB"></select></label>

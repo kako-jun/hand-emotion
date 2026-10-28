@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "gen:validators": "node scripts/gen-validators.mjs",
+    "build": "node scripts/gen-validators.mjs && tsc --noEmit && vite build",
     "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.0",
     "@pixiv/three-vrm": "^3.5.5",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
