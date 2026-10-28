@@ -1,15 +1,17 @@
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { Quaternion, Vector3 } from 'three';
+import { Euler, Quaternion, Vector3 } from 'three';
+
+const DEG = Math.PI / 180;
 import vrmTable from '../samples/vrm1-humanoid.avatar-profile.json';
 import { inspectVrmGlb } from '../src/avatar/glb';
 import { generateVrmProfile, profileIdFromName } from '../src/avatar/vrmProfile';
-import { boneQuat, handBasis, handReferenceFrame, toVrmPose, wristTarget } from '../src/avatar/vrmPose';
+import { boneQuat, buildRestRig, handBasis, handReferenceFrame, toVrmPose, twistAbout, wristTarget } from '../src/avatar/vrmPose';
 import type { Quat } from '../src/avatar/vrmPose';
 import { mirrorRotation, retargetMotion, retargetPose } from '../src/retarget';
 import { REST_POSE } from '../src/motion/rest';
 import { validateAvatarProfile } from '../src/validate';
-import { typedMotion } from './typed-samples';
+import { typedFullMotion, typedMotion } from './typed-samples';
 import { PRESET_MOTIONS } from '../src/text/presets';
 import type { HandPose, Side, Vec3 } from '../src/types/definition';
 import { applyBones, buildRig, fixturePath, glbJson, readFixture, worldPos } from './vrm-fixture';
@@ -282,5 +284,188 @@ describe('指ボーン欠落版(gesture-only)', () => {
     expect(Object.keys(out.bones).sort()).toEqual(['leftHand', 'leftLowerArm', 'leftUpperArm', 'rightHand', 'rightLowerArm', 'rightUpperArm']);
     applyBones(rig, out.bones);
     expect(worldPos(rig.bones.leftHand).x).toBeGreaterThan(0.1);
+  });
+});
+
+const hp = (position: Vec3, rotation: Vec3 = [0, 0, 0]): HandPose => ({ ...clone(REST_POSE.right), wrist: { position, rotation } });
+
+describe('位置・肘・手の向きを絶対値で検証(実装の定数と循環しない)', () => {
+  const rig = buildRig('stick-figure.vrm');
+  const place = (l: HandPose, r: HandPose) => {
+    const out = toVrmPose(retargetPose({ left: l, right: r }, rig.profile), rig.profile, rig.rest);
+    applyBones(rig, out.bones);
+    return out;
+  };
+  it('位置の符号: 演者の前方(+z)・上(+y)・右(+x)が VRM の前方・上・right(-x)側に出る', () => {
+    place(hp([0.1, 0.2, 0.25]), hp([0.1, 0.2, 0.25]));
+    const c = rig.rest.chest;
+    const s = rig.rest.scale;
+    const r = worldPos(rig.bones.rightHand);
+    expect(r.z - c[2]).toBeCloseTo(0.25 * s, 3);
+    expect(r.y - c[1]).toBeCloseTo(0.2 * s, 3);
+    expect(c[0] - r.x).toBeCloseTo(0.1 * s, 3); // 演者の右 = VRM の -x
+    const l = worldPos(rig.bones.leftHand);
+    expect(l.x - c[0]).toBeCloseTo(0.1 * s, 3); // 左は retarget の鏡像で +x 側
+  });
+  it('肘は肩-手首の線より 下・外・後ろ に曲がる', () => {
+    const off = (side: Side): Vector3 => {
+      const sh = worldPos(rig.bones[`${side}UpperArm`]);
+      const el = worldPos(rig.bones[`${side}LowerArm`]);
+      const wr = worldPos(rig.bones[`${side}Hand`]);
+      const dir = wr.clone().sub(sh).normalize();
+      const v = el.clone().sub(sh);
+      return v.addScaledVector(dir, -v.dot(dir));
+    };
+    place(hp([0.1, 0.2, 0.3]), hp([0.1, 0.2, 0.3]));
+    expect(off('right').y).toBeLessThan(-0.01);
+    expect(off('left').y).toBeLessThan(-0.01);
+    expect(off('right').x).toBeLessThan(0); // 外 = right は -x、left は +x
+    expect(off('left').x).toBeGreaterThan(0);
+    // 手首が肩の真上: 曲がる向きは 外・後ろ(下は直交成分に出ない)
+    const up = [0.2, 0.45, 0.0] as Vec3;
+    place(hp(up), hp(up));
+    expect(off('right').z).toBeLessThan(-0.01);
+    expect(off('left').z).toBeLessThan(-0.01);
+  });
+  it('手の基準フレーム: 手のひら法線は「前・下寄り 45° の基準」を前腕に直交化したもの', () => {
+    const ref = new Vector3(0, -1, 1).normalize();
+    for (const u of [new Vector3(0, -0.5, 0.87), new Vector3(0, 0.5, 0.87), new Vector3(0, 0, 1), new Vector3(-1, 0, 0), new Vector3(0, -1, 0)]) {
+      u.normalize();
+      const expected = ref.clone().addScaledVector(u, -ref.dot(u)).normalize();
+      for (const side of ['right', 'left'] as const) {
+        near(new Vector3(0, 0, 1).applyMatrix4(handReferenceFrame(u, side)), expected, 1e-9);
+      }
+    }
+    // 前腕が前を向くとき手のひらは下、前下・前上でも下寄り(上向きにならない)
+    for (const u of [new Vector3(0, 0, 1), new Vector3(0, -0.5, 0.87), new Vector3(0, 0.5, 0.87)]) {
+      expect(new Vector3(0, 0, 1).applyMatrix4(handReferenceFrame(u.normalize(), 'right')).y).toBeLessThan(0);
+    }
+  });
+  it('特異点(前腕 = 基準ベクトルと平行)でも基底は直交・単位長・det 1、quaternion は単位長', () => {
+    for (const u of [new Vector3(0, -1, 1).normalize(), new Vector3(0, 1, -1).normalize()]) {
+      for (const side of ['right', 'left'] as const) {
+        const m = handReferenceFrame(u, side);
+        expect(m.determinant()).toBeCloseTo(1, 9);
+        const cols = [new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, 1)].map((e) => e.applyMatrix4(m));
+        cols.forEach((c) => expect(c.length()).toBeCloseTo(1, 9));
+        expect(cols[0].dot(cols[1])).toBeCloseTo(0, 9);
+        expect(cols[1].dot(cols[2])).toBeCloseTo(0, 9);
+        near(cols[1], u, 1e-9);
+      }
+    }
+  });
+  it('手の world 向き = 基準フレーム × euler × B⁻¹(前腕のひねり分割後も不変)', () => {
+    for (const e of [[0, 0, 0], [20, 40, 10], [-30, 70, -10]] as Vec3[]) {
+      for (const pos of [[0.2, -0.4, 0.05], [0.1, 0.2, 0.3], [0.08, 0.35, 0.22]] as Vec3[]) {
+        place(hp(pos, e), hp(pos, e));
+        const rp = retargetPose({ left: hp(pos, e), right: hp(pos, e) }, rig.profile);
+        for (const side of ['right', 'left'] as const) {
+          const forearm = worldPos(rig.bones[`${side}Hand`]).sub(worldPos(rig.bones[`${side}LowerArm`])).normalize();
+          const eul = rp[side].bones[`${side}Hand`];
+          const E = new Quaternion().setFromEuler(new Euler(eul[0] * DEG, eul[1] * DEG, -eul[2] * DEG, 'XYZ'));
+          const expected = new Quaternion().setFromRotationMatrix(handReferenceFrame(forearm, side)).multiply(E).multiply(new Quaternion().setFromRotationMatrix(handBasis(side)).invert());
+          const got = rig.bones[`${side}Hand`].getWorldQuaternion(new Quaternion());
+          expect(got.angleTo(expected)).toBeLessThan(1e-6);
+        }
+      }
+    }
+  });
+  it('前腕のひねりは lowerArm が持ち、hand には swing だけが入る(待機姿勢で hand に大きなひねりが残らない)', () => {
+    const axisOf = (side: Side): Vector3 => worldPos(rig.bones[`${side}Hand`]).sub(worldPos(rig.bones[`${side}LowerArm`])).normalize();
+    for (const [pos, e] of [[[0.2, -0.4, 0.05], [0, 0, 0]], [[0.1, 0.2, 0.3], [0, 60, 0]]] as [Vec3, Vec3][]) {
+      const out = place(hp(pos, e), hp(pos, e));
+      for (const side of ['right', 'left'] as const) {
+        const hand = q(out.bones[`${side}Hand`]);
+        const axis = new Vector3(side === 'left' ? 1 : -1, 0, 0); // fixture の lowerArm 長軸(rest)
+        const tw = twistAbout(hand, axis);
+        expect(2 * Math.acos(Math.min(1, Math.abs(tw.w)))).toBeLessThan(1e-6);
+        void axisOf;
+      }
+    }
+    // ひねりが実際に lowerArm 側にある: 待機姿勢の lowerArm ローカル回転は前腕軸まわりに十分回っている
+    const rest = place(hp([0.2, -0.4, 0.05]), hp([0.2, -0.4, 0.05]));
+    const lowerTwist = twistAbout(q(rest.bones.rightLowerArm), new Vector3(-1, 0, 0));
+    expect(2 * Math.acos(Math.min(1, Math.abs(lowerTwist.w)))).toBeGreaterThan(0.3);
+  });
+  it('twistAbout: 軸まわりの回転はそのまま取り出し、軸に直交する回転は twist 0', () => {
+    const a = new Vector3(1, 0, 0);
+    const pure = new Quaternion().setFromAxisAngle(a, 1.0);
+    expect(twistAbout(pure, a).angleTo(pure)).toBeLessThan(1e-9);
+    const swing = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 1.0);
+    expect(twistAbout(swing, a).angleTo(new Quaternion())).toBeLessThan(1e-9);
+    expect(twistAbout(new Quaternion(1, 0, 0, 0).setFromAxisAngle(new Vector3(0, 1, 0), Math.PI), a).length()).toBeCloseTo(1, 9);
+  });
+  it('arm.shoulder / elbow が明示されても手首は目標に一致する(IK 優先・適用しない側を記録)', () => {
+    const withArm = (pos: Vec3, shoulder: Vec3, elbow: Vec3): HandPose => ({ ...hp(pos), arm: { shoulder, elbow } });
+    const cases: [Vec3, Vec3, Vec3][] = [[[0.1, 0.1, 0.3], [0, 0, 0], [30, 0, 0]], [[0.1, 0.1, 0.3], [10, 0, 0], [90, 0, 0]], [[0.05, 0.2, 0.2], [-20, 30, 10], [120, 0, 0]]];
+    for (const [pos, sh, el] of cases) {
+      const rp = retargetPose({ left: withArm(pos, sh, el), right: withArm(pos, sh, el) }, rig.profile);
+      const out = toVrmPose(rp, rig.profile, rig.rest);
+      applyBones(rig, out.bones);
+      expect(out.armOverridden).toEqual(['left', 'right']);
+      for (const side of ['left', 'right'] as const) near(worldPos(rig.bones[`${side}Hand`]), wristTarget(rp[side].wristPosition, rig.rest), 2e-3);
+    }
+    // typedFullMotion(arm 値入り)の全キーフレームでも一致
+    const rm = retargetMotion(typedFullMotion as any, rig.profile);
+    for (const k of rm.keyframes) {
+      const base = retargetPose(REST_POSE, rig.profile);
+      const rp = { left: k.pose.left ?? base.left, right: k.pose.right ?? base.right, fallback: rm.fallback, clamped: [] };
+      const out = toVrmPose(rp, rig.profile, rig.rest);
+      applyBones(rig, out.bones);
+      for (const side of ['left', 'right'] as const) if (!out.unreachable.includes(side)) near(worldPos(rig.bones[`${side}Hand`]), wristTarget(rp[side].wristPosition, rig.rest), 2e-3);
+    }
+    // arm なしの motion では記録されない
+    const plain = toVrmPose(retargetPose({ left: hp([0.1, 0.1, 0.3]), right: hp([0.1, 0.1, 0.3]) }, rig.profile), rig.profile, rig.rest);
+    expect(plain.armOverridden).toEqual([]);
+  });
+});
+
+describe('IK の堅牢性とエッジ', () => {
+  const rig = buildRig('stick-figure.vrm');
+  it('長さ 0 の上腕/前腕は IK しない(arms[side] = null)。NaN を出さない', () => {
+    const pos: Record<string, Vec3> = {};
+    for (const [n, o] of Object.entries(rig.bones)) {
+      const p = worldPos(o);
+      pos[n] = [p.x, p.y, p.z];
+    }
+    pos.leftLowerArm = pos.leftUpperArm; // 上腕の長さ 0
+    pos.rightHand = pos.rightLowerArm; // 前腕の長さ 0
+    const r = buildRestRig(pos, rig.profile);
+    expect(r.arms.left).toBeNull();
+    expect(r.arms.right).toBeNull();
+    const out = toVrmPose(retargetPose({ left: hp([0.1, 0.2, 0.3]), right: hp([0.1, 0.2, 0.3]) }, rig.profile), rig.profile, r);
+    for (const v of Object.values(out.bones)) for (const c of v) expect(Number.isFinite(c)).toBe(true);
+    expect(Object.keys(out.bones).filter((n) => /Arm$/.test(n))).toEqual([]); // 腕ボーンは書かない
+  });
+  it('全 quaternion が単位長(基準ベクトルと平行な前腕を含む)', () => {
+    for (const pos of [[0.1, 0.2, 0.3], [0.2, -0.4, 0.05], [0.3, 0.0, 0.3]] as Vec3[]) {
+      const out = toVrmPose(retargetPose({ left: hp(pos), right: hp(pos) }, rig.profile), rig.profile, rig.rest);
+      for (const v of Object.values(out.bones)) expect(q(v).length()).toBeCloseTo(1, 9);
+    }
+  });
+});
+
+describe('GLB 検査の追加(ノード番号・specVersion)', () => {
+  const base = (humanBones: unknown, specVersion: unknown = '1.0') => makeGlb({ nodes: [{}, {}, {}], extensions: { VRMC_vrm: { specVersion, humanoid: { humanBones } } } });
+  it('ノード番号が範囲外・負数・小数・文字列なら行つきエラー', () => {
+    for (const bad of [3, -1, 1.5, '1', null, Number.NaN]) {
+      const r = inspectVrmGlb(base({ hips: { node: 0 }, leftHand: { node: bad } }));
+      expect(r.ok).toBe(false);
+      expect(!r.ok && r.code).toBe('invalid');
+      expect(!r.ok && r.errors[0]).toContain('humanBones.leftHand.node');
+    }
+    const ok = inspectVrmGlb(base({ hips: { node: 0 }, leftHand: { node: 2 } }));
+    expect(ok.ok && ok.humanBones).toEqual(['hips', 'leftHand']);
+    // nodes 配列がない
+    const noNodes = inspectVrmGlb(makeGlb({ extensions: { VRMC_vrm: { specVersion: '1.0', humanoid: { humanBones: { hips: { node: 0 } } } } } }));
+    expect(noNodes.ok).toBe(false);
+  });
+  it('specVersion は three-vrm が受け付ける "1.0" / "1.0-beta" だけ', () => {
+    expect(inspectVrmGlb(base({ hips: { node: 0 } }, '1.0')).ok).toBe(true);
+    expect(inspectVrmGlb(base({ hips: { node: 0 } }, '1.0-beta')).ok).toBe(true);
+    for (const v of ['1.1', '1.', '1.0.0', '2.0', 1, null]) {
+      const r = inspectVrmGlb(base({ hips: { node: 0 } }, v));
+      expect(!r.ok && r.code).toBe('unsupported-version');
+    }
   });
 });

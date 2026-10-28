@@ -2,7 +2,7 @@
 // 読み込みはブラウザ内だけ(ファイルは fetch しない・アップロードしない)。VRM 1.0 のみ対応。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { VRMLoaderPlugin } from '@pixiv/three-vrm';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import type { VRM } from '@pixiv/three-vrm';
 import { inspectVrmGlb } from '../avatar/glb';
 import { buildRestRig, handBasis, toVrmPose } from '../avatar/vrmPose';
@@ -61,12 +61,7 @@ export class VrmAvatar {
 
   dispose(): void {
     this.vrm.scene.removeFromParent();
-    this.vrm.scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose();
-      const mat = m.material;
-      for (const x of Array.isArray(mat) ? mat : mat ? [mat] : []) x.dispose();
-    });
+    VRMUtils.deepDispose(this.vrm.scene);
   }
 }
 

@@ -208,6 +208,8 @@ $('exportDownload').addEventListener('click', () => {
 });
 // --- VRM(ブラウザ内だけで処理。未読込なら従来の手プレビュー) ---
 const vrmErrors = $('vrmErrors');
+/** 読み込みの連番。await 後に自分の番号でなければ結果を捨てる(連続選択・読み込み中の「外す」) */
+let loadSeq = 0;
 function showVrmErrors(lines: readonly string[]): void {
   vrmErrors.hidden = lines.length === 0;
   vrmErrors.textContent = lines.join('\n');
@@ -224,7 +226,9 @@ function setAvatarView(): void {
   $('labelA').textContent = avatar ? `${avatar.profile.id} (${avatar.profile.capability})` : `${PROFILES.vrm.id} (${PROFILES.vrm.capability})`;
   $('vrmStatus').textContent = avatar ? `${avatar.name}: ${avatar.profile.capability}${avatar.notes.length ? ' / ' + avatar.notes.join(' / ') : ''}` : '';
   const loaded = exportProfileSel.querySelector('option[value="loaded"]');
-  if (avatar && !loaded) exportProfileSel.add(new Option(`${avatar.profile.id} (${avatar.profile.capability}) 読み込んだ VRM`, 'loaded'));
+  const loadedLabel = avatar ? `${avatar.profile.id} (${avatar.profile.capability}) 読み込んだ VRM` : '';
+  if (avatar && !loaded) exportProfileSel.add(new Option(loadedLabel, 'loaded'));
+  else if (avatar && loaded) loaded.textContent = loadedLabel;
   if (!avatar && loaded) {
     if (exportProfileSel.value === 'loaded') exportProfileSel.value = 'custom';
     loaded.remove();
@@ -236,10 +240,16 @@ $<HTMLInputElement>('vrmFile').addEventListener('change', async (ev) => {
   const input = ev.target as HTMLInputElement;
   const f = input.files?.[0];
   if (!f) return;
+  const seq = ++loadSeq;
   showVrmErrors([]);
   try {
     const { loadVrm } = await import('./preview/vrmAvatar');
     const r = await loadVrm(await f.arrayBuffer(), f.name);
+    if (seq !== loadSeq) {
+      // 後から選ばれた/外された: この結果は捨てる
+      if (r.ok) r.avatar.dispose();
+      return;
+    }
     if (!r.ok) {
       showVrmErrors(r.errors.map((e, i) => `${i + 1}: ${e}`));
     } else {
@@ -249,11 +259,13 @@ $<HTMLInputElement>('vrmFile').addEventListener('change', async (ev) => {
       setAvatarView();
     }
   } catch (e) {
+    if (seq !== loadSeq) return;
     showVrmErrors([`VRM の読み込みに失敗しました: ${e instanceof Error ? e.message : String(e)}`]);
   }
   input.value = '';
 });
 $('vrmClear').addEventListener('click', () => {
+  loadSeq++;
   avatar?.dispose();
   avatar = null;
   showVrmErrors([]);

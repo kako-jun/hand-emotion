@@ -8,6 +8,8 @@ export type VrmInspection =
 
 const fail = (code: Extract<VrmInspection, { ok: false }>['code'], ...errors: string[]): VrmInspection => ({ ok: false, code, errors });
 
+/** three-vrm が受け付ける VRMC_vrm の specVersion */
+const SPEC_VERSIONS: ReadonlySet<string> = new Set(['1.0', '1.0-beta']);
 const MAGIC = 0x46546c67; // 'glTF'
 const JSON_CHUNK = 0x4e4f534a; // 'JSON'
 
@@ -31,9 +33,20 @@ export function inspectVrmGlb(input: ArrayBuffer | Uint8Array): VrmInspection {
     if (ext['VRM']) return fail('vrm0', 'VRM 0.x は未対応です(VRM 1.0 の .vrm を選んでください)');
     return fail('not-vrm', 'VRM ではありません(拡張 VRMC_vrm がない)');
   }
-  if (typeof vrm1.specVersion !== 'string' || !vrm1.specVersion.startsWith('1.')) return fail('unsupported-version', `VRMC_vrm specVersion ${String(vrm1.specVersion)} は未対応です(1.x のみ)`);
+  if (typeof vrm1.specVersion !== 'string' || !SPEC_VERSIONS.has(vrm1.specVersion)) return fail('unsupported-version', `VRMC_vrm specVersion ${String(vrm1.specVersion)} は未対応です("1.0" / "1.0-beta" のみ。three-vrm が受け付ける版)`);
   const hb = vrm1.humanoid?.humanBones;
   if (!hb || typeof hb !== 'object') return fail('no-humanoid', 'VRMC_vrm.humanoid.humanBones がありません(ヒューマノイド定義の欠落)');
-  const humanBones = Object.keys(hb).filter((k) => hb[k] && typeof (hb[k] as { node?: unknown }).node === 'number');
+  const nodeCount = Array.isArray((json as { nodes?: unknown }).nodes) ? (json as { nodes: unknown[] }).nodes.length : 0;
+  const bad: string[] = [];
+  const humanBones = Object.keys(hb).filter((k) => {
+    const node = (hb[k] as { node?: unknown } | null)?.node;
+    if (node === undefined) return false; // node のないエントリは無いものとして扱う
+    if (typeof node !== 'number' || !Number.isInteger(node) || node < 0 || node >= nodeCount) {
+      bad.push(`humanBones.${k}.node = ${String(node)} は不正なノード番号です(0〜${nodeCount - 1} の整数)`);
+      return false;
+    }
+    return true;
+  });
+  if (bad.length) return fail('invalid', ...bad);
   return { ok: true, humanBones, name: typeof vrm1.meta?.name === 'string' ? vrm1.meta.name : undefined };
 }

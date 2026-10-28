@@ -22,6 +22,8 @@ export const CHEST_TO_SHOULDER = 0.15;
 /** 「まっすぐな手」の手のひら法線の基準(前・下寄り 45°)。前腕方向に直交する成分を取る */
 const PALM_REF = new Vector3(0, -1, 1).normalize();
 /** 肘の曲がる向きの目安(外側は左右で符号を変える) */
+/** これより短い上腕/前腕は IK できない(長さ 0 で NaN になる)ため arms[side] = null にする */
+const MIN_BONE = 1e-4;
 const POLE = (side: Side): Vector3 => new Vector3(side === 'left' ? 0.3 : -0.3, -1, -0.4);
 
 export type Quat = readonly [number, number, number, number]; // x, y, z, w
@@ -34,6 +36,8 @@ export type VrmBonePose = Readonly<{
   bones: Readonly<Record<string, Quat>>;
   /** IK で手首が届かず、腕を伸ばしきった手 */
   unreachable: readonly Side[];
+  /** IK が有効なため、明示された arm.shoulder/elbow を適用しなかった手(手首位置を優先) */
+  armOverridden: readonly Side[];
 }>;
 
 const v3 = (a: Vec3): Vector3 => new Vector3(a[0], a[1], a[2]);
@@ -62,7 +66,12 @@ export function boneQuat(e: Vec3, side: Side): Quat {
 export function handReferenceFrame(u: Vector3, side: Side): Matrix4 {
   const frameRight = (dir: Vector3): Matrix4 => {
     const p = PALM_REF.clone().addScaledVector(dir, -PALM_REF.dot(dir));
-    if (p.lengthSq() < 1e-8) p.set(0, 0, 1);
+    if (p.lengthSq() < 1e-8) {
+      // 特異点(前腕が基準ベクトルと平行): 前腕に直交化した軸で退避する(単位長・右手系を保つ)
+      const axes = [new Vector3(0, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 1, 0)].map((x) => x.addScaledVector(dir, -x.dot(dir)));
+      axes.sort((x, y) => y.lengthSq() - x.lengthSq());
+      p.copy(axes[0]);
+    }
     p.normalize();
     const t = new Vector3().crossVectors(dir, p);
     return new Matrix4().makeBasis(t, dir, p);
@@ -72,8 +81,15 @@ export function handReferenceFrame(u: Vector3, side: Side): Matrix4 {
   return new Matrix4().multiplyMatrices(MIRROR, frameRight(mirrored)).multiply(MIRROR);
 }
 
+/** q = swing · twist と分けたときの、軸 a(単位ベクトル)まわりの twist */
+export function twistAbout(q: Quaternion, a: Vector3): Quaternion {
+  const d = q.x * a.x + q.y * a.y + q.z * a.z;
+  const t = new Quaternion(a.x * d, a.y * d, a.z * d, q.w);
+  return t.lengthSq() < 1e-12 ? new Quaternion() : t.normalize();
+}
+
 // --- 腕の IK ---
-type ArmSolution = Readonly<{ upper: Quaternion; lowerLocal: Quaternion; lowerWorld: Quaternion; forearm: Vector3; reachable: boolean }>;
+type ArmSolution = Readonly<{ upper: Quaternion; lowerLocal: Quaternion; lowerWorld: Quaternion; forearm: Vector3; /** lowerArm の長軸(rest のローカル = ワールド) */ lowerAxis: Vector3; reachable: boolean }>;
 
 function solveArm(side: Side, target: Vector3, rest: ArmRest): ArmSolution {
   const sh = v3(rest.shoulder);
@@ -100,7 +116,7 @@ function solveArm(side: Side, target: Vector3, rest: ArmRest): ArmSolution {
   const upper = new Quaternion().setFromUnitVectors(dUp0.clone().normalize(), elbowDir);
   const lowerWorld = new Quaternion().setFromUnitVectors(dLow0.clone().normalize().applyQuaternion(upper), forearm).multiply(upper);
   const lowerLocal = upper.clone().invert().multiply(lowerWorld);
-  return { upper, lowerLocal, lowerWorld, forearm, reachable: raw <= maxReach && raw >= minReach };
+  return { upper, lowerLocal, lowerWorld, forearm, lowerAxis: dLow0.clone().normalize(), reachable: raw <= maxReach && raw >= minReach };
 }
 
 /** T-pose 時のボーン位置(VRM モデル空間)から RestRig を作る。肩・肘・手首が揃わない側は arms[side] = null(IK なし) */
@@ -113,7 +129,7 @@ export function buildRestRig(positions: Readonly<Record<string, Vec3 | undefined
     const shoulder = b.shoulder && positions[b.shoulder];
     const elbow = b.elbow && positions[b.elbow];
     const wrist = positions[b.wrist];
-    if (shoulder && elbow && wrist) {
+    if (shoulder && elbow && wrist && v3(elbow).distanceTo(v3(shoulder)) >= MIN_BONE && v3(wrist).distanceTo(v3(elbow)) >= MIN_BONE) {
       arms[side] = { shoulder, elbow, wrist };
       lenSum += v3(elbow).distanceTo(v3(shoulder)) + v3(wrist).distanceTo(v3(elbow));
       lenCount++;
@@ -135,37 +151,46 @@ export function wristTarget(pos: Vec3, rig: RestRig): Vector3 {
 export function toVrmPose(pose: RetargetedPose, profile: AvatarProfile, rig: RestRig): VrmBonePose {
   const bones: Record<string, Quat> = {};
   const unreachable: Side[] = [];
+  const armOverridden: Side[] = [];
   for (const side of ['left', 'right'] as const) {
     const hand = pose[side];
     const names = profile.bones[side];
     const arm = rig.arms[side];
     let parentWorld = new Quaternion();
     let forearm = new Vector3(side === 'left' ? 1 : -1, 0, 0);
+    let twistAxis: Vector3 | null = null;
+    let upper = new Quaternion();
+    let lowerLocal = new Quaternion();
     if (arm) {
       const sol = solveArm(side, wristTarget(hand.wristPosition, rig), arm);
       if (!sol.reachable) unreachable.push(side);
-      // 明示された肩/肘の回転(motion の arm)は IK 結果の上に加える追加の回転
-      const off = (bone: string | undefined): Quaternion => {
-        const e = bone ? hand.bones[bone] : undefined;
-        if (!e) return new Quaternion();
-        const b = quatOf(handBasis(side));
-        return b.clone().multiply(eulerQuat(e)).multiply(b.clone().invert());
-      };
-      const upper = sol.upper.clone().multiply(off(names.shoulder));
-      const lowerLocal = sol.lowerLocal.clone().multiply(off(names.elbow));
-      if (names.shoulder) bones[names.shoulder] = toQuat(upper);
-      if (names.elbow) bones[names.elbow] = toQuat(lowerLocal);
+      // IK が有効な側では、手首位置が目標から外れないよう motion の arm.shoulder/elbow は適用しない(位置優先)。適用しなかった側を記録する
+      if ((names.shoulder && hand.bones[names.shoulder]) || (names.elbow && hand.bones[names.elbow])) armOverridden.push(side);
+      upper = sol.upper;
+      lowerLocal = sol.lowerLocal;
       parentWorld = upper.clone().multiply(lowerLocal);
       forearm = sol.forearm;
+      twistAxis = sol.lowerAxis;
     }
     const wristEuler = hand.bones[names.wrist] ?? ([0, 0, 0] as const);
     const orientation = quatOf(handReferenceFrame(forearm, side)).multiply(eulerQuat(wristEuler));
     const world = orientation.multiply(quatOf(handBasis(side)).invert());
-    bones[names.wrist] = toQuat(parentWorld.clone().invert().multiply(world));
+    let handLocal = parentWorld.clone().invert().multiply(world);
+    if (twistAxis) {
+      // 前腕軸まわりのひねりは lowerArm に載せ、hand には swing だけを書く(world の手の向きは変わらない)
+      const twist = twistAbout(handLocal, twistAxis);
+      lowerLocal = lowerLocal.clone().multiply(twist);
+      handLocal = twist.clone().invert().multiply(handLocal);
+    }
+    if (arm) {
+      if (names.shoulder) bones[names.shoulder] = toQuat(upper);
+      if (names.elbow) bones[names.elbow] = toQuat(lowerLocal);
+    }
+    bones[names.wrist] = toQuat(handLocal);
     for (const bone of Object.values(names.fingers ?? {})) {
       const e = bone && hand.bones[bone];
       if (e) bones[bone] = boneQuat(e, side);
     }
   }
-  return { bones, unreachable };
+  return { bones, unreachable, armOverridden };
 }
