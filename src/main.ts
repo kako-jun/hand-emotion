@@ -9,8 +9,10 @@ import type { Mode, ModeKind, Plan } from './modes';
 import { formatIssue } from './import/cues';
 import type { CueFormat } from './import/cues';
 import { retargetPose } from './retarget';
+import { buildBrief, exportRetargetBriefMarkdown, exportRetargetBriefYaml, runtimeMotionToString } from './export';
 import { HandRigPair } from './preview/handModel';
-import { FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption } from './ui/labels';
+import { EXPORT_LABELS, FORMAT_LABELS, MODE_LABELS, MODE_NAME, UNREVIEWED_BADGE, omittedCaption, provenanceBadge, unsupportedCaption } from './ui/labels';
+import type { ExportKind } from './ui/labels';
 import type { AvatarProfile } from './types/definition';
 
 function profile(json: unknown): AvatarProfile {
@@ -149,11 +151,54 @@ function replan(): void {
   $('modeDesc').textContent = MODE_LABELS[mode.kind].description;
   layout();
   renderCueList();
+  renderExport();
   time = 0;
   setPlaying(false);
 }
 for (const el of [textEl, formatSel, modeSel]) el.addEventListener(el === textEl ? 'input' : 'change', replan);
-select.addEventListener('change', () => setRigB(select.value as keyof typeof PROFILES));
+select.addEventListener('change', () => {
+  setRigB(select.value as keyof typeof PROFILES);
+  exportProfileSel.value = select.value;
+  renderExport();
+});
+
+// --- 出力(brief model から3種を生成。表示・コピー・ダウンロードだけ) ---
+const exportKindSel = $<HTMLSelectElement>('exportKind');
+for (const k of Object.keys(EXPORT_LABELS) as ExportKind[]) exportKindSel.add(new Option(EXPORT_LABELS[k].name, k));
+const exportProfileSel = $<HTMLSelectElement>('exportProfile');
+for (const k of Object.keys(PROFILES) as (keyof typeof PROFILES)[]) exportProfileSel.add(new Option(`${PROFILES[k].id} (${PROFILES[k].capability})`, k));
+exportProfileSel.value = 'custom';
+let exportText = '';
+function renderExport(): void {
+  if (!plan || !plan.ok) {
+    exportText = '';
+  } else {
+    const src = buildBrief(plan.timeline, currentMode(), PROFILES[exportProfileSel.value as keyof typeof PROFILES]);
+    const kind = exportKindSel.value as ExportKind;
+    exportText = kind === 'runtime-json' ? runtimeMotionToString(src) : kind === 'brief-yaml' ? exportRetargetBriefYaml(src.brief) : exportRetargetBriefMarkdown(src.brief);
+  }
+  $('exportOut').textContent = exportText || '(有効な入力がありません)';
+  ($('exportCopy') as HTMLButtonElement).disabled = ($('exportDownload') as HTMLButtonElement).disabled = !exportText;
+}
+for (const el of [exportKindSel, exportProfileSel]) el.addEventListener('change', renderExport);
+$('exportCopy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(exportText);
+    $('exportStatus').textContent = 'コピーしました';
+  } catch {
+    $('exportStatus').textContent = 'コピーできませんでした(ブラウザの権限)';
+  }
+});
+$('exportDownload').addEventListener('click', () => {
+  const l = EXPORT_LABELS[exportKindSel.value as ExportKind];
+  const url = URL.createObjectURL(new Blob([exportText], { type: `${l.mime};charset=utf-8` }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = l.file;
+  a.click();
+  URL.revokeObjectURL(url);
+  $('exportStatus').textContent = `${l.file} をダウンロード`;
+});
 $<HTMLInputElement>('file').addEventListener('change', async (ev) => {
   const f = (ev.target as HTMLInputElement).files?.[0];
   if (!f) return;
@@ -253,6 +298,7 @@ if (import.meta.env.DEV) {
       fingerA: lastRetargets?.a.right.bones['rightIndexProximal'] ?? null,
       fingerB: lastRetargets?.b.right.bones['Index1.R'] ?? null,
     }),
+    exportState: () => ({ kind: exportKindSel.value, profile: exportProfileSel.value, text: exportText }),
     seekTo: (t: number) => { time = t; setPlaying(false); },
     play: () => setPlaying(true),
   };
