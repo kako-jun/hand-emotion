@@ -223,3 +223,13 @@ describe('レビュー指摘の追加ケース', () => {
     expect(validateMotion(d).ok).toBe(false);
   });
 });
+
+describe('事前生成した検証器(ajv standalone)', () => {
+  it('src/validate/compiled.js はスキーマから再生成した内容と一致し、new Function / eval を使わない', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { readFileSync } = await import('node:fs');
+    execFileSync('node', ['scripts/gen-validators.mjs', '--check'], { cwd: new URL('..', import.meta.url).pathname });
+    const code = readFileSync(new URL('../src/validate/compiled.js', import.meta.url), 'utf8');
+    expect(code).not.toMatch(/new Function|\beval\(|require\(/);
+  });
+});

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "gen:validators": "node scripts/gen-validators.mjs",
+    "build": "node scripts/gen-validators.mjs && tsc --noEmit && vite build",
     "test": "vitest run",
     "preview": "vite preview"
   },

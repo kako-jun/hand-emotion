@@ -62,6 +62,7 @@ src/preview/vrmAvatar.ts           # three-vrm で .vrm を読み、vrmPose の�
 scripts/make-fixture-vrm.mjs       # テスト用 VRM 1.0(棒人間)の生成(--check で書き出し済みと一致検査)。fixtures/ に全指あり・指なしの 2 本
 tests/vrm.test.ts, tests/vrm-fixture.ts # profile 生成・euler/鏡像規約・IK 到達・手のひら向き・指なし・エラー系(フィクスチャを Object3D 階層にして world 座標で検証)
 src/capture/{types,math,hand,series,motion,errors}.ts # 録画の純粋関数(Three.js・MediaPipe・DOM 非依存)。hand: 21 ランドマーク -> HandPose(左右・位置・手首 euler・指の屈曲・腕長スケール)、series: 外れ値・欠落補間・平滑・間引き、motion: フレーム列 -> MotionDefinition(unreviewed 固定)と可動域警告、errors: カメラ/モデルのエラー分類
+scripts/gen-validators.mjs         # schema から ajv standalone で src/validate/compiled.js を事前生成(--check で一致検査)。CSP の unsafe-eval を不要にする
 src/capture/{camera,mediapipe}.ts  # 薄いアダプタ(getUserMedia / HandLandmarker)。ランドマークの意味づけはここに置かない。mediapipe は動的 import
 src/ui/recorder.ts                 # 「録画」セクションの DOM コントローラ。純粋関数とアダプタを呼んで表示するだけ
 tests/capture.test.ts, tests/capture-synth.ts # 純粋関数の単体テスト。synth は姿勢 -> 合成ランドマーク(順運動学)で往復一致を見る
@@ -85,7 +86,7 @@ tests/types.test.ts                # フィクスチャ==サンプル JSON、フ
 ## 録画の依存と配信（Phase 4b）
 
 - **wasm は自サイトで配る（node_modules から複製）**。`@mediapipe/tasks-vision` の `exports` が `wasm/` を公開していないため `?url` import が使えない。そこで `vite.config.ts` の小さなプラグインが、開発サーバーでは `/mediapipe-wasm/*` を `node_modules` から配信し、ビルドでは `dist/mediapipe-wasm/` へ出力する（SIMD 版と非 SIMD 版のみ。`_module_` 版は使わないので複製しない）。CDN にしなかった理由は、wasm の版ずれ（パッケージ版と CDN 版）と第三者 CDN への依存を避けるため。
-- **外部への接続は CSP で絞る**。`@mediapipe/tasks-vision` は利用統計を `https://odml.pa.googleapis.com/v1/log` へ POST する（カメラ停止時の `close()` と動作中の定期送信。映像は含まれない）。`index.html` の CSP meta の `connect-src` を `'self'`・`blob:`・`data:`・`https://storage.googleapis.com`（モデル取得）だけにして遮断する。`script-src` は `'self' 'unsafe-eval' 'wasm-unsafe-eval'`（`unsafe-eval` は ajv が検証器を `new Function` で生成するため、`wasm-unsafe-eval` は wasm のコンパイルに必要。外部スクリプトは許可しない）、`worker-src`/`img-src`/`media-src` は `blob:` を許可（VRM のテクスチャ等）。開発サーバーのときだけ `vite.config.ts` が HMR の WebSocket（`ws://localhost:*`）を `connect-src` へ足し、ビルドは厳格のまま。テストが odml 非許可と外部許可がモデル取得先だけであることを固定する。代償は `dist` に wasm 約 28MB が増えること。
+- **外部への接続は CSP で絞る**。`@mediapipe/tasks-vision` は利用統計を `https://odml.pa.googleapis.com/v1/log` へ POST する（カメラ停止時の `close()` と動作中の定期送信。映像は含まれない）。`index.html` の CSP meta の `connect-src` を `'self'`・`blob:`・`data:`・`https://storage.googleapis.com`（モデル取得）だけにして遮断する。`script-src` は `'self' 'wasm-unsafe-eval'`（`wasm-unsafe-eval` は wasm のコンパイルに必要。`unsafe-eval` と外部スクリプトは許可しない。ajv の検証器は実行時に `new Function` で作らず、`scripts/gen-validators.mjs`〔ajv standalone〕がスキーマから `src/validate/compiled.js` を事前生成する。`npm run build` が毎回再生成し、`tests/validate.test.ts` が生成物とスキーマの一致を検査する）、`worker-src`/`img-src`/`media-src` は `blob:` を許可（VRM のテクスチャ等）。開発サーバーのときだけ `vite.config.ts` が HMR の WebSocket（`ws://localhost:*`）を `connect-src` へ足し、ビルドは厳格のまま。テストが odml 非許可と外部許可がモデル取得先だけであることを固定する。代償は `dist` に wasm 約 28MB が増えること。
 - **モデル `hand_landmarker.task` はバンドルしない**。公式 URL から実行時に取得し、失敗はエラー表示（`classifyModelError`）。
 - `@mediapipe/tasks-vision` は `createHandDetector` の中で動的 import（録画を開始するまで読まない）。
 - 録画 → motion の純粋関数は MediaPipe の型に依存しない（`DetectedHand` / `CaptureFrame` をアダプタが詰め替える）。UI が持つのは「フレームを溜める・スライダー値を渡す・結果を表示する」だけで、左右・座標・間引きの判断は `src/capture/` に閉じる。

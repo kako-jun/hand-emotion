@@ -1,14 +1,8 @@
-import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
-import motionSchema from '../../schema/motion.schema.json';
-import profileSchema from '../../schema/avatar-profile.schema.json';
+// 検証器は schema から ajv standalone で事前生成したコード(scripts/gen-validators.mjs)。実行時に new Function を使わない(CSP の unsafe-eval が不要)
+import { validateMotion as validateMotionSchema, validateProfile as validateProfileSchema } from './compiled.js';
 import type { AvatarProfile, AxisRange, MotionDefinition } from '../types/definition';
 
-const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false, strictTypes: false });
-addFormats(ajv);
 const EPS = 1e-9;
-const validateMotionSchema = ajv.compile(motionSchema);
-const validateProfileSchema = ajv.compile(profileSchema);
 
 export type ValidationResult<T> =
   | { ok: true; value: T }
