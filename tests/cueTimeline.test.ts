@@ -133,12 +133,13 @@ describe('速度上限は 1.5 倍(spec の値をリテラルで固定)', () => {
   });
 });
 
-/** 姿勢間の最大差: 手首位置(m)と関節角(度)。連続性の検査用 */
+/** 姿勢間の最大差: 手首位置(m)と、手首回転・関節角(度)。連続性の検査用 */
 function poseDistance(a: FullPose, b: FullPose): { pos: number; ang: number } {
   let pos = 0;
   let ang = 0;
   for (const side of ['left', 'right'] as const) {
     a[side].wrist.position.forEach((v, i) => (pos = Math.max(pos, Math.abs(v - b[side].wrist.position[i]))));
+    a[side].wrist.rotation.forEach((v, i) => (ang = Math.max(ang, Math.abs(v - b[side].wrist.rotation[i]))));
     for (const j of Object.keys(a[side].joints) as (keyof FullPose['left']['joints'])[]) a[side].joints[j].forEach((v, i) => (ang = Math.max(ang, Math.abs(v - b[side].joints[j][i]))));
   }
   return { pos, ang };
@@ -155,7 +156,7 @@ function maxStep(t: ReturnType<typeof buildCueTimeline>, step = 0.0005): { pos: 
   }
   return worst;
 }
-// 自然な動きの 5ms あたり最大変化の余裕(これを超えれば瞬間移動)
+// 0.5ms 刻みで見た、自然な動き(短い隙間での寄せを含む)の 1 刻みあたり最大変化の余裕。瞬間移動はこれを大きく超える
 const STEP_POS = 0.008;
 const STEP_ANG = 1;
 
@@ -182,6 +183,60 @@ describe('姿勢の連続性(境界で手が瞬間移動しない)', () => {
       expect(m.pos, JSON.stringify(cues)).toBeLessThan(STEP_POS);
       expect(m.ang, JSON.stringify(cues)).toBeLessThan(STEP_ANG);
     }
+  });
+  it('字幕のみキューの前後・挟む場合(隙間 0.1s / 0.4s 未満 / 隙間なし)', () => {
+    const g = { start: 0, end: 2, text: '好き' };
+    for (const cues of [
+      [g, { start: 2.1, end: 4, text: 'あした' }, { start: 4.1, end: 6, text: '歌う' }],
+      [g, { start: 2, end: 2.3, text: 'あした' }, { start: 2.3, end: 4, text: '歌う' }],
+      [g, { start: 2, end: 2.3, text: 'あした' }, { start: 2.5, end: 4, text: '歌う' }],
+      [g, { start: 2, end: 3, text: 'あした' }, { start: 3.0, end: 5, text: 'ありがとう' }],
+      // 字幕のみキューの途中から次が始まる(前のキューが自分のブレンドの最中)
+      [g, { start: 2, end: 2.1, text: 'あした' }, { start: 2.1, end: 4, text: '歌う' }],
+      [{ start: 0, end: 1, text: '好き' }, { start: 1, end: 1.1, text: 'あした' }, { start: 1.1, end: 3, text: '歌う' }],
+      [{ start: 0, end: 0.1, text: 'あした' }, { start: 0.1, end: 0.2, text: 'あした' }, { start: 0.2, end: 2, text: '歌う' }],
+    ]) {
+      const m = maxStep(ct(cues));
+      expect(m.pos, JSON.stringify(cues)).toBeLessThan(STEP_POS);
+      expect(m.ang, JSON.stringify(cues)).toBeLessThan(STEP_ANG);
+    }
+  });
+  it('短いジェスチャーキューの連鎖(0.05/0.1/0.2/0.3 秒刻み)', () => {
+    for (const w of [0.05, 0.1, 0.2, 0.3]) {
+      const cues = ['好き', '歌う', '食べる', 'ありがとう', 'こんにちは'].map((text, i) => ({ start: i * w, end: (i + 1) * w + 0.5, text }));
+      const m = maxStep(ct(cues));
+      expect(m.pos, `w=${w}`).toBeLessThan(STEP_POS);
+      expect(m.ang, `w=${w}`).toBeLessThan(STEP_ANG);
+    }
+  });
+  it('極端に短い隙間(0.5ms / 1ms / 10ms / 50ms)', () => {
+    for (const gap of [0.0005, 0.001, 0.01, 0.05]) {
+      const m = maxStep(ct([{ start: 0, end: 2, text: '好き' }, { start: 2 + gap, end: 4, text: '歌う' }]));
+      expect(m.pos, `gap=${gap}`).toBeLessThan(STEP_POS);
+      expect(m.ang, `gap=${gap}`).toBeLessThan(STEP_ANG);
+    }
+  });
+  it('開始時刻が同じキュー(長さ 0 の区間)', () => {
+    for (const cues of [
+      [{ start: 0, end: 2, text: '好き' }, { start: 1, end: 3, text: '歌う' }, { start: 1, end: 4, text: 'ありがとう' }],
+      [{ start: 0, end: 3, text: '好き' }, { start: 3, end: 5, text: 'あした' }, { start: 3, end: 6, text: '歌う' }],
+      // 隙間のあと、開始時刻が同じ2キュー(手前側は長さ 0)。先頭への寄せが手前側に奪われない
+      [{ start: 0, end: 2, text: '好き' }, { start: 4, end: 6, text: '歌う' }, { start: 4, end: 7, text: 'ありがとう' }],
+    ]) {
+      const m = maxStep(ct(cues));
+      expect(m.pos, JSON.stringify(cues)).toBeLessThan(STEP_POS);
+      expect(m.ang, JSON.stringify(cues)).toBeLessThan(STEP_ANG);
+    }
+  });
+  it('total は最後の身振りの待機への復帰が終わるまで含み、復帰が実際に再生される', () => {
+    const d = natural('好き 歌う 食べる');
+    const t = ct([{ start: 0, end: d / 1.5, text: '好き 歌う 食べる' }]);
+    const g = t.segments[0];
+    expect(t.total).toBeCloseTo(g.gestures!.total / g.speed + RETURN_TO_REST);
+    expect(t.total).toBeGreaterThan(g.end);
+    const at = (x: number) => poseDistance(sampleCueTimeline(t, x).pose, REST_POSE).pos;
+    expect(at(g.end + 0.01)).toBeGreaterThan(0.01); // 区間終端の直後はまだ復帰の途中
+    expect(at(t.total)).toBeLessThan(1e-9);
   });
   it('既定サンプル(main.ts の SRT)の全区間で連続', () => {
     const p = planFromText(DEFAULT_SRT, 'auto', { kind: 'caption-wipe' });

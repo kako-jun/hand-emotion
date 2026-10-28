@@ -2,7 +2,11 @@
 //  - 各キューの区間 [start, end) に、そのキューの身振り列を収める。end は次キューの start で打ち切る。
 //  - 身振り列が区間より長いとき: 速度を上げて収める。ただし上限 MAX_SPEED 倍まで。それでも収まらない末尾の身振りは省略し、字幕のみにする。
 //  - 短いとき: 身振りの後は待機姿勢へ戻して区間の終わりまで待つ(引き伸ばさない)。
-//  - 姿勢は常に連続: 待機への復帰は区間終端を越えても続け、隙間のないキューの先頭は前の姿勢から BLEND_IN で寄せる。
+//  - 姿勢は常に連続(瞬間移動しない):
+//      * 待機への復帰(RETURN_TO_REST)は区間終端を越えても続く。total は最後の復帰が終わるまで延ばす。
+//      * 前のキューとの隙間が LEAD_IN 以上で、次が身振りありのキュー: 開始 LEAD_IN 前から待機(復帰の続き)→先頭姿勢へ寄せる。
+//      * 隙間が LEAD_IN 未満、または字幕のみのキュー: キュー開始から BLEND_IN で、前のキューの(自身のブレンドを含む)姿勢→自分の姿勢へ寄せる。
+//      * 長さ 0 の区間(開始時刻が同じキューの手前側)は前後のキューとして扱わない。
 import type { Cue } from '../import/cues';
 import type { SequenceItem } from '../text/vocabulary';
 import { applyEase, lerpFullPose, samplePose } from './interpolate';
@@ -13,11 +17,11 @@ import type { Timeline } from './timeline';
 
 /** 身振りの再生速度の上限(倍) */
 export const MAX_SPEED = 1.5;
-/** キュー開始前に待機姿勢から先頭姿勢へ寄せる時間(秒)。身振り本体の開始時刻は動かさない */
+/** 隙間がこれ以上あるとき、キュー開始前に先頭姿勢へ寄せる時間(秒)。身振り本体の開始時刻は動かさない */
 export const LEAD_IN = 0.3;
 /** 身振りが終わってから待機姿勢へ戻る時間(秒)。キューの区間を越えても戻り続ける */
 export const RETURN_TO_REST = TRANSITION;
-/** 隙間なく続くキューの境界で、前のキューの姿勢から先頭の姿勢へ寄せる時間(秒) */
+/** 隙間が LEAD_IN 未満(または字幕のみ)のキューの開始後、前の姿勢から自分の姿勢へ寄せる時間(秒) */
 export const BLEND_IN = TRANSITION;
 
 export type CueSegment = Readonly<{
@@ -57,7 +61,9 @@ export function buildCueTimeline(
     const speed = gestures && duration > 0 ? Math.min(MAX_SPEED, Math.max(1, gestures.total / duration)) : 1;
     return { index, cue, end, gestures, speed, omitted: motions.slice(kept).map((m) => m.token), unsupported };
   });
-  return { segments, total: segments.reduce((m, s) => Math.max(m, s.end), 0) };
+  // 最後の身振りの待機への復帰が終わるまでを再生時間に含める
+  const total = segments.reduce((m, s) => Math.max(m, s.end, s.gestures ? s.cue.start + s.gestures.total / s.speed + RETURN_TO_REST : 0), 0);
+  return { segments, total };
 }
 
 export type CueSample = Readonly<{
@@ -78,32 +84,37 @@ function poseInCue(seg: CueSegment, t: number): FullPose {
   return u >= 1 ? REST_POSE : lerpFullPose(sampleTimeline(seg.gestures, seg.gestures.total).pose, REST_POSE, u);
 }
 
+/** キュー i の姿勢。開始後 BLEND_IN の間は前のキュー(自身のブレンドを含めて再帰評価)の姿勢から寄せる */
+function blended(segs: readonly CueSegment[], i: number, t: number): FullPose {
+  const s = segs[i];
+  const own = poseInCue(s, t);
+  let p = i - 1;
+  while (p >= 0 && segs[p].end <= segs[p].cue.start) p--;
+  if (p < 0 || t - s.cue.start >= BLEND_IN) return own;
+  const gap = s.cue.start - segs[p].end;
+  if (gap < LEAD_IN || !s.gestures) return lerpFullPose(blended(segs, p, t), own, applyEase('ease-in-out', (t - s.cue.start) / BLEND_IN));
+  return own;
+}
 export function sampleCueTimeline(ct: CueTimeline, t: number): CueSample {
   const segs = ct.segments;
-  // 区間内: 開始が最も遅いキュー(重なりは後勝ち)
   let active = -1;
   for (let i = 0; i < segs.length; i++) if (segs[i].cue.start <= t && t < segs[i].end) active = i;
   if (active >= 0) {
     const s = segs[active];
-    let pose = poseInCue(s, t);
-    const prev = segs[active - 1];
-    // 隙間なく続く(または重なる)キューの先頭: 前のキューの姿勢から寄せる
-    if (prev && prev.end >= s.cue.start - 1e-9 && t - s.cue.start < BLEND_IN) {
-      pose = lerpFullPose(poseInCue(prev, t), pose, applyEase('ease-in-out', (t - s.cue.start) / BLEND_IN));
-    }
+    const pose = blended(segs, active, t);
     if (!s.gestures) return { pose, cueIndex: active, gestureIndex: -1, phase: 'rest' };
     const local = (t - s.cue.start) * s.speed;
     if (local <= s.gestures.total) return { pose, cueIndex: active, gestureIndex: sampleTimeline(s.gestures, local).segmentIndex, phase: 'gesture' };
     return { pose, cueIndex: active, gestureIndex: -1, phase: 'rest' };
   }
-  // 区間外: 直前のキューの復帰を続け、次のキュー直前なら LEAD_IN で先頭姿勢へ寄せる
+  // 長さ 0 の区間(開始時刻が同じキューの手前側)は前後のキューとして数えない
   let prevIdx = -1;
-  for (let i = 0; i < segs.length; i++) if (segs[i].cue.start <= t) prevIdx = i;
-  const base = prevIdx >= 0 ? poseInCue(segs[prevIdx], t) : REST_POSE;
-  const upcoming = segs[prevIdx + 1];
-  if (upcoming?.gestures && upcoming.cue.start - t < LEAD_IN) {
-    const windowStart = Math.max(prevIdx >= 0 ? segs[prevIdx].end : -Infinity, upcoming.cue.start - LEAD_IN);
-    const u = (t - windowStart) / (upcoming.cue.start - windowStart);
+  for (let i = 0; i < segs.length; i++) if (segs[i].cue.start <= t && segs[i].end > segs[i].cue.start) prevIdx = i;
+  const base = prevIdx >= 0 ? blended(segs, prevIdx, t) : REST_POSE;
+  const upcoming = segs.find((x, i) => i > prevIdx && x.cue.start > t && x.end > x.cue.start);
+  const gap = upcoming && prevIdx >= 0 ? upcoming.cue.start - segs[prevIdx].end : Infinity;
+  if (upcoming?.gestures && gap >= LEAD_IN && upcoming.cue.start - t < LEAD_IN) {
+    const u = 1 - (upcoming.cue.start - t) / LEAD_IN;
     const first = samplePose(upcoming.gestures.segments[0].motion!, 0);
     return { pose: lerpFullPose(base, first, applyEase('ease-in-out', u)), cueIndex: -1, gestureIndex: -1, phase: 'lead-in' };
   }
