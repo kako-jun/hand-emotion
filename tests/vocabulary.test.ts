@@ -69,6 +69,7 @@ describe('誤爆の回帰(短い語幹・長音・ハイフン)', () => {
     expect(ids(textToSequence('好き歌う'))).toEqual(['好き', '歌う']);
     expect(ids(textToSequence('すきすき'))).toEqual(['好き', '好き']);
     for (const w of ['好き〜', '好きー', '歌う〜', '好きっ', '好き♪', '好き♡♡']) expect(textToSequence(w), w).toHaveLength(1);
+    expect(ids(textToSequence('すき歌ってね'))).toEqual(['好き', '歌う', '?ね']);
     expect(ids(textToSequence('好き〜'))).toEqual(['好き']);
     for (const w of ['歌うよ', '歌うね', '歌うの', '好きよ', '好きね', '好きで', '好きだ', '食べるよ']) {
       const s = textToSequence(w);
