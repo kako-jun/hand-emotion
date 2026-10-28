@@ -8,7 +8,7 @@
 
 - **Three.js**（両手・指の3D表示、アバター骨格へのリターゲット）。バンドラは **Vite + TypeScript**、テストは **Vitest**、スキーマ検証は **ajv**（JSON Schema 2020-12）、YAML は **yaml**。UI フレームワークは未採用（素の DOM）。
 - 独自の手話辞書・アバター資産を抱え込まず、**アバター非依存の中間表現（motion JSON）と avatar profile を介したマッピング**を中心にする。
-- 将来: HamNoSys / SiGML import、MediaPipe Hands、VRM / glTF humanoid rig への retarget。
+- VRM 1.0 は `@pixiv/three-vrm` で読み込む（Phase 4a）。将来: HamNoSys / SiGML import、MediaPipe Hands、VRM 以外の glTF humanoid rig への retarget。
 
 ## レイヤ分離
 
@@ -23,7 +23,7 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 - **定義データ（不変）**: プリセット motion（`skeleton`/`pose`/`motion`/`timing`/`semantic label`）と avatar profile（どのボーンが肩/肘/手首/指か・可動域・初期姿勢補正）。署名や外部取得ではなく、ライブラリが配る静的定義。
 - **実行時 motion/再生状態（可変）**: タイムライン上の再生位置・現在の適用ポーズ・fallback 判定結果。定義側に再生状態を焼き込まない。
 - **retarget は純粋なマッピングにする**: 「中間表現 motion + avatar profile → アバター骨格のポーズ列」を、Three.js のシーン/DOM に依存しない純粋関数として実装し、単体テスト可能にする。可動域超過時の腕位置補正・指ボーン不足時の gesture-only フォールバックも、この純粋関数の中で決める。
-- **プレビュー層は retarget の結果を描画するだけ**にし、マッピングのロジックを描画コードへ埋め込まない。
+- **プレビュー層は retarget の結果を描画するだけ**にし、マッピングのロジックを描画コードへ埋め込まない。VRM では座標・回転の変換（`src/avatar/vrmPose.ts`）を DOM/シーン非依存の純粋関数に置き、適用層（`src/preview/vrmAvatar.ts`）は結果を normalized humanoid ボーンへ書くだけ。
 - **取り込み・語彙変換・キュータイムラインも Three.js / DOM 非依存の純粋関数**。UI（`main.ts`）は `planFromText` の結果を表示し、`sampleCueTimeline` の姿勢を retarget → 描画へ渡すだけ。モードごとの分岐は `Mode` union の網羅 switch に閉じる。
 
 ## 出力形式
@@ -33,7 +33,7 @@ Three.js プレビュー層 # 簡易手モデル/アバターへ motion を適�
 
 両出力は同一の中間表現から生成する（片方だけが持つ情報を作らない）。実装は Phase 3 の `src/export/`: 共通の brief model（`buildBrief`）を作り、そこから runtime JSON / YAML / Markdown を生成する（Three.js・DOM 非依存の純粋関数。UI は表示・コピー・Blob ダウンロードだけ）。仕様は `docs/spec.md`「出力層」。
 
-## コード構成（Phase 0〜3）
+## コード構成（Phase 0〜4a）
 
 ```
 schema/motion.schema.json          # motion の JSON Schema（正本）
@@ -55,7 +55,13 @@ presets/kana-*.motion.json         # かな指文字の最小セット(あいう
 src/export/{brief,runtime,yaml,markdown,index}.ts # 出力層。brief model(buildBrief)→ runtime JSON / YAML(yaml パッケージ) / Markdown。往復検証用 validateRuntimeMotion
 src/ui/labels.ts                   # UI 文言(モード名/説明・形式名・出力形式名・未監修バッジ)
 src/preview/handModel.ts           # Three.js 簡易手モデル。retarget 結果(ボーン名→回転)を適用するだけ
-src/main.ts                        # DOM UI(貼り付け/ファイル入力・形式/モード切替・再生/シーク・現在キューのハイライト・エラー表示)とプレビュー(リターゲット時のみ2骨格を並置)
+src/avatar/glb.ts                  # .vrm(GLB)のヘッダ検査: VRM 1.0 判定・humanoid ボーン名。VRM 0.x / 非 VRM / 欠落は行つきエラー(純粋関数)
+src/avatar/vrmProfile.ts           # humanoid ボーン名 -> avatar profile(full / gesture-only 判定。samples/vrm1-humanoid の対応表を再利用。純粋関数)
+src/avatar/vrmPose.ts              # retarget の出力 -> VRM ボーンのローカル quaternion(座標・euler 規約・腕 2 ボーン IK。Three.js の数学クラスのみ・DOM/シーン非依存)
+src/preview/vrmAvatar.ts           # three-vrm で .vrm を読み、vrmPose の結果を normalized humanoid へ書くだけ(動的 import で遅延ロード)
+scripts/make-fixture-vrm.mjs       # テスト用 VRM 1.0(棒人間)の生成(--check で書き出し済みと一致検査)。fixtures/ に全指あり・指なしの 2 本
+tests/vrm.test.ts, tests/vrm-fixture.ts # profile 生成・euler/鏡像規約・IK 到達・手のひら向き・指なし・エラー系(フィクスチャを Object3D 階層にして world 座標で検証)
+src/main.ts                        # DOM UI(貼り付け/ファイル入力・形式/モード切替・再生/シーク・現在キューのハイライト・エラー表示・VRM 選択)とプレビュー(リターゲット時のみ2骨格を並置)
 tests/validate.test.ts             # 正常系 + 関節数/可動域/左右/timing 不正の異常系
 tests/typed-samples.ts             # 型付き(as const satisfies)フィクスチャ: サンプル相当 + reviewed/arm/hold/全 ease/jsl 入り
 tests/interpolate.test.ts          # 補間・ease・hold
