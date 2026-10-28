@@ -20,11 +20,11 @@ export type Segment = Readonly<{
 
 export type Timeline = Readonly<{ segments: readonly Segment[]; total: number }>;
 
-export function buildTimeline(items: readonly SequenceItem[]): Timeline {
+export function buildTimeline(items: readonly SequenceItem[], transition: number = TRANSITION): Timeline {
   const segments: Segment[] = [];
   let t = 0;
   items.forEach((item, i) => {
-    if (i > 0) t += TRANSITION;
+    if (i > 0) t += transition;
     const dur = item.kind === 'motion' ? item.motion.duration : UNKNOWN_DURATION;
     segments.push({ token: item.token, ...(item.kind === 'motion' ? { motion: item.motion } : {}), start: t, end: t + dur });
     t += dur;
