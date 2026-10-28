@@ -94,6 +94,9 @@ $('stop').addEventListener('click', () => {
   time = 0;
   setPlaying(false);
 });
+let dragging = false;
+seek.addEventListener('pointerdown', () => { dragging = true; });
+for (const ev of ['pointerup', 'pointercancel', 'change'] as const) seek.addEventListener(ev, () => { dragging = false; });
 seek.addEventListener('input', () => {
   time = (Number(seek.value) / 1000) * timeline.total;
 });
@@ -125,7 +128,7 @@ function frame(dt: number): void {
     $('caption').className = seg && !seg.motion ? 'unknown' : '';
     lastCaption = caption;
   }
-  if (document.activeElement !== seek) seek.value = String(timeline.total ? Math.round((time / timeline.total) * 1000) : 0);
+  if (!dragging) seek.value = String(timeline.total ? Math.round((time / timeline.total) * 1000) : 0);
   $('time').textContent = `${time.toFixed(2)} / ${timeline.total.toFixed(2)} s`;
   renderer.render(scene, camera);
 }
@@ -137,6 +140,7 @@ renderer.setAnimationLoop((now) => {
 });
 
 // 実ブラウザ検証用の読み取り口(状態の観測のみ)
+if (import.meta.env.DEV) {
 (window as unknown as Record<string, unknown>).__handEmotion = {
   state: () => ({
     time,
@@ -153,3 +157,4 @@ renderer.setAnimationLoop((now) => {
   }),
   seekTo: (t: number) => { time = t; setPlaying(false); },
 };
+}
