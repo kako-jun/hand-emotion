@@ -1,0 +1,260 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "gltf-custom.narrow",
+  "rig": "gltf-humanoid",
+  "capability": "full",
+  "bones": {
+    "left": {
+      "wrist": "Hand.L",
+      "shoulder": "UpperArm.L",
+      "elbow": "LowerArm.L",
+      "fingers": {
+        "thumbCmc": "Thumb1.L",
+        "thumbMcp": "Thumb2.L",
+        "thumbIp": "Thumb3.L",
+        "indexMcp": "Index1.L",
+        "indexPip": "Index2.L",
+        "indexDip": "Index3.L",
+        "middleMcp": "Middle1.L",
+        "middlePip": "Middle2.L",
+        "middleDip": "Middle3.L",
+        "ringMcp": "Ring1.L",
+        "ringPip": "Ring2.L",
+        "ringDip": "Ring3.L",
+        "littleMcp": "Pinky1.L",
+        "littlePip": "Pinky2.L",
+        "littleDip": "Pinky3.L"
+      }
+    },
+    "right": {
+      "wrist": "Hand.R",
+      "shoulder": "UpperArm.R",
+      "elbow": "LowerArm.R",
+      "fingers": {
+        "thumbCmc": "Thumb1.R",
+        "thumbMcp": "Thumb2.R",
+        "thumbIp": "Thumb3.R",
+        "indexMcp": "Index1.R",
+        "indexPip": "Index2.R",
+        "indexDip": "Index3.R",
+        "middleMcp": "Middle1.R",
+        "middlePip": "Middle2.R",
+        "middleDip": "Middle3.R",
+        "ringMcp": "Ring1.R",
+        "ringPip": "Ring2.R",
+        "ringDip": "Ring3.R",
+        "littleMcp": "Pinky1.R",
+        "littlePip": "Pinky2.R",
+        "littleDip": "Pinky3.R"
+      }
+    }
+  },
+  "rangeOfMotion": {
+    "wrist": {
+      "x": [
+        -40,
+        40
+      ],
+      "y": [
+        -60,
+        60
+      ],
+      "z": [
+        -20,
+        20
+      ]
+    },
+    "elbow": {
+      "x": [
+        0,
+        130
+      ]
+    },
+    "shoulder": {
+      "x": [
+        -80,
+        80
+      ],
+      "y": [
+        -80,
+        80
+      ],
+      "z": [
+        -80,
+        80
+      ]
+    },
+    "thumbCmc": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "thumbMcp": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "thumbIp": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "indexMcp": {
+      "x": [
+        0,
+        70
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "indexPip": {
+      "x": [
+        0,
+        80
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "indexDip": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "middleMcp": {
+      "x": [
+        0,
+        70
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "middlePip": {
+      "x": [
+        0,
+        80
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "middleDip": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "ringMcp": {
+      "x": [
+        0,
+        70
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "ringPip": {
+      "x": [
+        0,
+        80
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "ringDip": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "littleMcp": {
+      "x": [
+        0,
+        70
+      ],
+      "z": [
+        -10,
+        10
+      ]
+    },
+    "littlePip": {
+      "x": [
+        0,
+        80
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    },
+    "littleDip": {
+      "x": [
+        0,
+        60
+      ],
+      "z": [
+        -5,
+        5
+      ]
+    }
+  },
+  "restPoseCorrection": {
+    "Hand.L": [
+      5,
+      0,
+      0
+    ],
+    "Hand.R": [
+      5,
+      0,
+      0
+    ],
+    "UpperArm.L": [
+      0,
+      0,
+      -45
+    ],
+    "UpperArm.R": [
+      0,
+      0,
+      45
+    ]
+  }
+}

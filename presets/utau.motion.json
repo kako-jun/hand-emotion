@@ -1,0 +1,957 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "utau.sign-like",
+  "category": "sign-like-gesture",
+  "provenance": {
+    "status": "unreviewed",
+    "source": "hand-authored sign-like gesture; not a reviewed sign"
+  },
+  "semantic": {
+    "label": "歌う",
+    "reading": "うたう",
+    "gloss": "SING",
+    "lang": "ja"
+  },
+  "duration": 2.0,
+  "keyframes": [
+    {
+      "time": 0,
+      "ease": "ease-out",
+      "pose": {
+        "left": {
+          "wrist": {
+            "position": [
+              0.04,
+              0.2,
+              0.25
+            ],
+            "rotation": [
+              10,
+              0,
+              10
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "right": {
+          "wrist": {
+            "position": [
+              0.04,
+              0.2,
+              0.25
+            ],
+            "rotation": [
+              10,
+              0,
+              10
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "time": 0.5,
+      "ease": "ease-in-out",
+      "pose": {
+        "left": {
+          "wrist": {
+            "position": [
+              0.14,
+              0.24,
+              0.32
+            ],
+            "rotation": [
+              10,
+              0,
+              -20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "right": {
+          "wrist": {
+            "position": [
+              0.14,
+              0.24,
+              0.32
+            ],
+            "rotation": [
+              10,
+              0,
+              -20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "time": 1.0,
+      "ease": "ease-in-out",
+      "pose": {
+        "left": {
+          "wrist": {
+            "position": [
+              0.2,
+              0.2,
+              0.36
+            ],
+            "rotation": [
+              10,
+              0,
+              20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "right": {
+          "wrist": {
+            "position": [
+              0.2,
+              0.2,
+              0.36
+            ],
+            "rotation": [
+              10,
+              0,
+              20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "time": 1.5,
+      "ease": "ease-in-out",
+      "pose": {
+        "left": {
+          "wrist": {
+            "position": [
+              0.26,
+              0.24,
+              0.38
+            ],
+            "rotation": [
+              10,
+              0,
+              -20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "right": {
+          "wrist": {
+            "position": [
+              0.26,
+              0.24,
+              0.38
+            ],
+            "rotation": [
+              10,
+              0,
+              -20
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "time": 2.0,
+      "pose": {
+        "left": {
+          "wrist": {
+            "position": [
+              0.28,
+              0.22,
+              0.38
+            ],
+            "rotation": [
+              10,
+              0,
+              0
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        "right": {
+          "wrist": {
+            "position": [
+              0.28,
+              0.22,
+              0.38
+            ],
+            "rotation": [
+              10,
+              0,
+              0
+            ]
+          },
+          "joints": {
+            "thumbCmc": [
+              0,
+              0,
+              0
+            ],
+            "thumbMcp": [
+              0,
+              0,
+              0
+            ],
+            "thumbIp": [
+              0,
+              0,
+              0
+            ],
+            "indexMcp": [
+              0,
+              0,
+              6
+            ],
+            "indexPip": [
+              0,
+              0,
+              0
+            ],
+            "indexDip": [
+              0,
+              0,
+              0
+            ],
+            "middleMcp": [
+              0,
+              0,
+              0
+            ],
+            "middlePip": [
+              0,
+              0,
+              0
+            ],
+            "middleDip": [
+              0,
+              0,
+              0
+            ],
+            "ringMcp": [
+              0,
+              0,
+              -3.0
+            ],
+            "ringPip": [
+              0,
+              0,
+              0
+            ],
+            "ringDip": [
+              0,
+              0,
+              0
+            ],
+            "littleMcp": [
+              0,
+              0,
+              -6
+            ],
+            "littlePip": [
+              0,
+              0,
+              0
+            ],
+            "littleDip": [
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

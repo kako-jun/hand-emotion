@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "custom-gesture-only",
+  "rig": "custom",
+  "capability": "gesture-only",
+  "bones": {
+    "left": {
+      "wrist": "wrist_l",
+      "elbow": "forearm_l"
+    },
+    "right": {
+      "wrist": "wrist_r",
+      "elbow": "forearm_r"
+    }
+  },
+  "rangeOfMotion": {
+    "wrist": {
+      "x": [
+        -60,
+        60
+      ],
+      "y": [
+        -80,
+        80
+      ],
+      "z": [
+        -25,
+        25
+      ]
+    },
+    "elbow": {
+      "x": [
+        0,
+        140
+      ]
+    }
+  }
+}
