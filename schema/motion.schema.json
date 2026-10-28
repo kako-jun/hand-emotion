@@ -48,7 +48,7 @@
         },
         "reviewedAt": {
           "type": "string",
-          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          "format": "date"
         },
         "source": {
           "type": "string"
@@ -119,7 +119,8 @@
         "maximum": 360
       },
       "minItems": 3,
-      "maxItems": 3
+      "maxItems": 3,
+      "description": "euler XYZ intrinsic, degrees (see docs/spec.md)"
     },
     "ease": {
       "enum": [
@@ -185,7 +186,7 @@
           ],
           "properties": {
             "position": {
-              "$ref": "#/$defs/vec3"
+              "$ref": "#/$defs/position"
             },
             "rotation": {
               "$ref": "#/$defs/vec3"
@@ -273,6 +274,17 @@
           }
         }
       }
+    },
+    "position": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -10,
+        "maximum": 10
+      },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "meters; origin = signer chest center (sternum), +x = signer right, +y up, +z forward. Left hand uses the right-hand mirror convention (see docs/spec.md)"
     }
   }
 }

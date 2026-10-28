@@ -1,9 +1,12 @@
 import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 import motionSchema from '../../schema/motion.schema.json';
 import profileSchema from '../../schema/avatar-profile.schema.json';
-import type { AvatarProfile, MotionDefinition } from '../types/definition';
+import type { AvatarProfile, AxisRange, MotionDefinition } from '../types/definition';
 
 const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false, strictTypes: false });
+addFormats(ajv);
+const EPS = 1e-9;
 const validateMotionSchema = ajv.compile(motionSchema);
 const validateProfileSchema = ajv.compile(profileSchema);
 
@@ -24,9 +27,9 @@ function timingErrors(m: MotionDefinition): string[] {
   const errs: string[] = [];
   let prev = -Infinity;
   m.keyframes.forEach((k, i) => {
-    if (k.time <= prev) errs.push(`/keyframes/${i}/time must be strictly increasing`);
+    if (k.time <= prev + EPS) errs.push(`/keyframes/${i}/time must be strictly increasing`);
     prev = k.time;
-    if (k.time + (k.hold ?? 0) > m.duration) errs.push(`/keyframes/${i} time+hold exceeds duration`);
+    if (k.time + (k.hold ?? 0) > m.duration + EPS) errs.push(`/keyframes/${i} time+hold exceeds duration`);
   });
   return errs;
 }
@@ -43,6 +46,7 @@ export function validateAvatarProfile(data: unknown): ValidationResult<AvatarPro
   const p = data as unknown as AvatarProfile;
   const errs: string[] = [];
   for (const [joint, r] of Object.entries(p.rangeOfMotion)) {
+    if (!r) continue;
     for (const axis of ['x', 'y', 'z'] as const) {
       const range = r[axis];
       if (range && range[0] > range[1]) errs.push(`/rangeOfMotion/${joint}/${axis} min exceeds max`);
@@ -65,7 +69,7 @@ export function checkRangeOfMotion(m: MotionDefinition, p: AvatarProfile): strin
       if (hp.arm?.shoulder) entries.push(['shoulder', hp.arm.shoulder]);
       if (hp.arm?.elbow) entries.push(['elbow', hp.arm.elbow]);
       for (const [joint, rot] of entries) {
-        const r = p.rangeOfMotion[joint];
+        const r = (p.rangeOfMotion as Record<string, AxisRange | undefined>)[joint];
         if (!r) continue;
         for (const axis of ['x', 'y', 'z'] as const) {
           const range = r[axis];

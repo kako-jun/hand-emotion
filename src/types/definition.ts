@@ -10,6 +10,7 @@ export const FINGER_JOINTS = [
 ] as const;
 
 export type FingerJoint = (typeof FINGER_JOINTS)[number];
+export type RangeJoint = FingerJoint | 'wrist' | 'shoulder' | 'elbow';
 export type Side = 'left' | 'right';
 /** euler 回転(度) [x, y, z] */
 export type Vec3 = readonly [number, number, number];
@@ -31,7 +32,8 @@ export type HandPose = Readonly<{
   arm?: Readonly<{ shoulder?: Vec3; elbow?: Vec3 }>;
 }>;
 
-export type Pose = Readonly<Partial<Record<Side, HandPose>>>;
+/** 左右少なくとも片方は必須(スキーマの minProperties:1 と一致) */
+export type Pose = Readonly<{ left: HandPose; right?: HandPose } | { left?: HandPose; right: HandPose }>;
 
 export type Keyframe = Readonly<{ time: number; ease?: Ease; hold?: number; pose: Pose }>;
 
@@ -65,6 +67,7 @@ export type AvatarProfile = Readonly<{
   /** gesture-only: 指ボーン不足のため手首/腕のジェスチャのみ */
   capability: 'full' | 'gesture-only';
   bones: Readonly<{ left: SideBones; right: SideBones; face?: Readonly<Record<string, string>> }>;
-  rangeOfMotion: Readonly<Record<string, AxisRange>>;
+  /** 右手基準の可動域。左手は鏡像として同じ値を使う */
+  rangeOfMotion: Readonly<Partial<Record<RangeJoint, AxisRange>>>;
   restPoseCorrection?: Readonly<Record<string, Vec3>>;
 }>;
